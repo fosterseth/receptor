@@ -135,12 +135,20 @@ func (cfg loglevelCfg) Init() error {
 	return nil
 }
 
+func (cfg loglevelCfg) Reload() error {
+	return cfg.Init()
+}
+
 type traceCfg struct{}
 
 func (cfg traceCfg) Prepare() error {
 	SetShowTrace(true)
 
 	return nil
+}
+
+func (cfg traceCfg) Reload() error {
+	return cfg.Prepare()
 }
 
 func init() {

@@ -15,6 +15,7 @@ import (
 	"github.com/ghjm/cmdline"
 	"github.com/google/shlex"
 	"github.com/project-receptor/receptor/pkg/logger"
+	"github.com/project-receptor/receptor/pkg/utils"
 )
 
 // commandUnit implements the WorkUnit interface for the Receptor command worker plugin.
@@ -313,11 +314,27 @@ func (cfg commandCfg) Run() error {
 	return err
 }
 
+func (cfg commandCfg) Prepare() error {
+	return utils.MarkforNoReload(cfg)
+}
+
+func (cfg commandCfg) CheckReload() error {
+	return utils.ErrorIfCfgChanged(cfg)
+}
+
 // commandRunnerCfg is a hidden command line option for a command runner process.
 type commandRunnerCfg struct {
 	Command string `required:"true"`
 	Params  string `required:"true"`
 	UnitDir string `required:"true"`
+}
+
+func (cfg commandRunnerCfg) Prepare() error {
+	return utils.MarkforNoReload(cfg)
+}
+
+func (cfg commandRunnerCfg) CheckReload() error {
+	return utils.ErrorIfCfgChanged(cfg)
 }
 
 // Run runs the action.

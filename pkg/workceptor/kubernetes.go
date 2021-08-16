@@ -18,6 +18,7 @@ import (
 	"github.com/ghjm/cmdline"
 	"github.com/google/shlex"
 	"github.com/project-receptor/receptor/pkg/logger"
+	"github.com/project-receptor/receptor/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -946,6 +947,10 @@ func (cfg workKubeCfg) newWorker(w *Workceptor, unitID string, workType string) 
 
 // Prepare inspects the configuration for validity.
 func (cfg workKubeCfg) Prepare() error {
+	err := utils.MarkforNoReload(cfg)
+	if err != nil {
+		return err
+	}
 	lcAuth := strings.ToLower(cfg.AuthMethod)
 	if lcAuth != "kubeconfig" && lcAuth != "incluster" && lcAuth != "runtime" {
 		return fmt.Errorf("invalid AuthMethod: %s", cfg.AuthMethod)
@@ -980,6 +985,10 @@ func (cfg workKubeCfg) Prepare() error {
 	}
 
 	return nil
+}
+
+func (cfg workKubeCfg) CheckReload() error {
+	return utils.ErrorIfCfgChanged(cfg)
 }
 
 // Run runs the action.

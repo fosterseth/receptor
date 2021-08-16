@@ -92,6 +92,14 @@ type tcpProxyInboundCfg struct {
 	TLSClient     string `description:"Name of TLS client config for the Receptor connection"`
 }
 
+func (cfg tcpProxyInboundCfg) Prepare() error {
+	return utils.MarkforNoReload(cfg)
+}
+
+func (cfg tcpProxyInboundCfg) CheckReload() error {
+	return utils.ErrorIfCfgChanged(cfg)
+}
+
 // Run runs the action.
 func (cfg tcpProxyInboundCfg) Run() error {
 	logger.Debug("Running TCP inbound proxy service %v\n", cfg)
@@ -114,6 +122,14 @@ type tcpProxyOutboundCfg struct {
 	Address   string `required:"true" description:"Address for outbound TCP connection"`
 	TLSServer string `description:"Name of TLS server config for the Receptor service"`
 	TLSClient string `description:"Name of TLS client config for the TCP connection"`
+}
+
+func (cfg tcpProxyOutboundCfg) Prepare() error {
+	return utils.MarkforNoReload(cfg)
+}
+
+func (cfg tcpProxyOutboundCfg) CheckReload() error {
+	return utils.ErrorIfCfgChanged(cfg)
 }
 
 // Run runs the action.

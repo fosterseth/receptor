@@ -62,6 +62,14 @@ type commandSvcCfg struct {
 	TLS     string `description:"Name of TLS server config"`
 }
 
+func (cfg commandSvcCfg) Prepare() error {
+	return utils.MarkforNoReload(cfg)
+}
+
+func (cfg commandSvcCfg) CheckReload() error {
+	return utils.ErrorIfCfgChanged(cfg)
+}
+
 // Run runs the action.
 func (cfg commandSvcCfg) Run() error {
 	logger.Info("Running command service %s\n", cfg)

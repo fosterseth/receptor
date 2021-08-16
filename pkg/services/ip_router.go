@@ -367,6 +367,14 @@ type ipRouterCfg struct {
 	Routes      string `description:"Comma separated list of CIDR subnets to advertise"`
 }
 
+func (cfg ipRouterCfg) Prepare() error {
+	return utils.MarkforNoReload(cfg)
+}
+
+func (cfg ipRouterCfg) CheckReload() error {
+	return utils.ErrorIfCfgChanged(cfg)
+}
+
 // Run runs the action.
 func (cfg ipRouterCfg) Run() error {
 	logger.Debug("Running tun router service %s\n", cfg)

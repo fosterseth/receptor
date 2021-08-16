@@ -15,6 +15,7 @@ import (
 	"github.com/project-receptor/receptor/pkg/logger"
 	"github.com/project-receptor/receptor/pkg/netceptor"
 	_ "github.com/project-receptor/receptor/pkg/services"
+	"github.com/project-receptor/receptor/pkg/utils"
 	_ "github.com/project-receptor/receptor/pkg/version"
 	"github.com/project-receptor/receptor/pkg/workceptor"
 )
@@ -62,6 +63,14 @@ func (cfg nodeCfg) Init() error {
 	return nil
 }
 
+func (cfg nodeCfg) Prepare() error {
+	return utils.MarkforNoReload(cfg)
+}
+
+func (cfg nodeCfg) CheckReload() error {
+	return utils.ErrorIfCfgChanged(cfg)
+}
+
 func (cfg nodeCfg) Run() error {
 	workceptor.MainInstance.ListKnownUnitIDs() // Triggers a scan of unit dirs and restarts any that need it
 
@@ -69,6 +78,14 @@ func (cfg nodeCfg) Run() error {
 }
 
 type nullBackendCfg struct{}
+
+func (cfg nullBackendCfg) Prepare() error {
+	return utils.MarkforNoReload(cfg)
+}
+
+func (cfg nullBackendCfg) CheckReload() error {
+	return utils.ErrorIfCfgChanged(cfg)
+}
 
 // make the nullBackendCfg object be usable as a do-nothing Backend.
 func (cfg nullBackendCfg) Start(ctx context.Context, wg *sync.WaitGroup) (chan netceptor.BackendSession, error) {
@@ -107,13 +124,27 @@ func main() {
 	}
 
 	osArgs := os.Args[1:]
-	// create closure with the passed in args to be ran during a reload
-	controlsvc.ReloadCL = func(dryRun bool) error {
-		if dryRun {
-			return cl.ParseAndRun(osArgs, []string{""}, cmdline.ShowHelpIfNoArgs)
-		}
 
-		return cl.ParseAndRun(osArgs, []string{"Reload"}, cmdline.ShowHelpIfNoArgs)
+	configProvided := false
+	for _, arg := range osArgs {
+		if arg == "--config" || arg == "-c" {
+			configProvided = true
+
+			break
+		}
+	}
+
+	// only allow reloading if a configuration file was provided. If ReloadCL is
+	// not set, then the control service reload command will fail
+	if configProvided {
+		// create closure with the passed in args to be ran during a reload
+		controlsvc.ReloadCL = func(dryRun bool) error {
+			if dryRun {
+				return cl.ParseAndRun(osArgs, []string{"CheckReload"}, cmdline.ShowHelpIfNoArgs)
+			}
+
+			return cl.ParseAndRun(osArgs, []string{"Reload"}, cmdline.ShowHelpIfNoArgs)
+		}
 	}
 
 	err := cl.ParseAndRun(osArgs, []string{"Init", "Prepare", "Run"}, cmdline.ShowHelpIfNoArgs)

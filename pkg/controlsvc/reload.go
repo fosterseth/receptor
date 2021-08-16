@@ -5,6 +5,7 @@ import (
 
 	"github.com/project-receptor/receptor/pkg/logger"
 	"github.com/project-receptor/receptor/pkg/netceptor"
+	"github.com/project-receptor/receptor/pkg/utils"
 )
 
 type (
@@ -38,6 +39,14 @@ func (c *reloadCommand) ControlFunc(nc *netceptor.Netceptor, cfo ControlFuncOper
 	if err != nil {
 		cfr["Success"] = false
 		cfr["Error"] = err.Error()
+
+		return cfr, err
+	}
+
+	err = utils.ErrorIfAbsent()
+	if err != nil {
+		cfr["Success"] = false
+		cfr["Error"] = err
 
 		return cfr, err
 	}

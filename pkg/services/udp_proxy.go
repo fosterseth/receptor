@@ -181,6 +181,14 @@ type udpProxyInboundCfg struct {
 	RemoteService string `required:"true" description:"Receptor service name to connect to"`
 }
 
+func (cfg udpProxyInboundCfg) Prepare() error {
+	return utils.MarkforNoReload(cfg)
+}
+
+func (cfg udpProxyInboundCfg) CheckReload() error {
+	return utils.ErrorIfCfgChanged(cfg)
+}
+
 // Run runs the action.
 func (cfg udpProxyInboundCfg) Run() error {
 	logger.Debug("Running UDP inbound proxy service %v\n", cfg)
@@ -192,6 +200,14 @@ func (cfg udpProxyInboundCfg) Run() error {
 type udpProxyOutboundCfg struct {
 	Service string `required:"true" description:"Receptor service name to bind to"`
 	Address string `required:"true" description:"Address for outbound UDP connection"`
+}
+
+func (cfg udpProxyOutboundCfg) Prepare() error {
+	return utils.MarkforNoReload(cfg)
+}
+
+func (cfg udpProxyOutboundCfg) CheckReload() error {
+	return utils.ErrorIfCfgChanged(cfg)
 }
 
 // Run runs the action.

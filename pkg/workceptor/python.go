@@ -8,6 +8,7 @@ import (
 	"os/exec"
 
 	"github.com/ghjm/cmdline"
+	"github.com/project-receptor/receptor/pkg/utils"
 )
 
 // pythonUnit implements the WorkUnit interface.
@@ -72,6 +73,14 @@ func (cfg workPythonCfg) Run() error {
 	err := MainInstance.RegisterWorker(cfg.WorkType, cfg.newWorker)
 
 	return err
+}
+
+func (cfg workPythonCfg) Prepare() error {
+	return utils.MarkforNoReload(cfg)
+}
+
+func (cfg workPythonCfg) CheckReload() error {
+	return utils.ErrorIfCfgChanged(cfg)
 }
 
 func init() {

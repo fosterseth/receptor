@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 
 	"github.com/ghjm/cmdline"
+	"github.com/project-receptor/receptor/pkg/utils"
 )
 
 // **************************************************************************
@@ -31,6 +32,11 @@ type tlsServerCfg struct {
 
 // Prepare creates the tls.config and stores it in the global map.
 func (cfg tlsServerCfg) Prepare() error {
+	err := utils.MarkforNoReload(cfg)
+	if err != nil {
+		return err
+	}
+
 	tlscfg := &tls.Config{}
 
 	certbytes, err := ioutil.ReadFile(cfg.Cert)
@@ -81,6 +87,11 @@ type tlsClientConfig struct {
 
 // Prepare creates the tls.config and stores it in the global map.
 func (cfg tlsClientConfig) Prepare() error {
+	err := utils.MarkforNoReload(cfg)
+	if err != nil {
+		return err
+	}
+
 	tlscfg := &tls.Config{}
 
 	if cfg.Cert != "" || cfg.Key != "" {
@@ -116,6 +127,14 @@ func (cfg tlsClientConfig) Prepare() error {
 	tlscfg.InsecureSkipVerify = cfg.InsecureSkipVerify
 
 	return MainInstance.SetClientTLSConfig(cfg.Name, tlscfg)
+}
+
+func (cfg tlsServerCfg) CheckReload() error {
+	return utils.ErrorIfCfgChanged(cfg)
+}
+
+func (cfg tlsClientConfig) CheckReload() error {
+	return utils.ErrorIfCfgChanged(cfg)
 }
 
 func init() {
