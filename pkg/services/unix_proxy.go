@@ -86,14 +86,6 @@ type unixProxyInboundCfg struct {
 	TLS           string `description:"Name of TLS client config for the Receptor connection"`
 }
 
-func (cfg unixProxyInboundCfg) Prepare() error {
-	return utils.MarkforNoReload(cfg)
-}
-
-func (cfg unixProxyInboundCfg) CheckReload() error {
-	return utils.ErrorIfCfgChanged(cfg)
-}
-
 // Run runs the action.
 func (cfg unixProxyInboundCfg) Run() error {
 	logger.Debug("Running Unix socket inbound proxy service %v\n", cfg)
@@ -111,14 +103,6 @@ type unixProxyOutboundCfg struct {
 	Service  string `required:"true" description:"Receptor service name to bind to"`
 	Filename string `required:"true" description:"Socket filename, which must already exist"`
 	TLS      string `description:"Name of TLS server config for the Receptor connection"`
-}
-
-func (cfg unixProxyOutboundCfg) Prepare() error {
-	return utils.MarkforNoReload(cfg)
-}
-
-func (cfg unixProxyOutboundCfg) CheckReload() error {
-	return utils.ErrorIfCfgChanged(cfg)
 }
 
 // Run runs the action.

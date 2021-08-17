@@ -389,14 +389,6 @@ type cmdlineConfigUnix struct {
 	TCPTLS      string `description:"Name of TLS server config for the TCP listener"`
 }
 
-func (cfg cmdlineConfigUnix) Prepare() error {
-	return utils.MarkforNoReload(cfg)
-}
-
-func (cfg cmdlineConfigUnix) CheckReload() error {
-	return utils.ErrorIfCfgChanged(cfg)
-}
-
 // Run runs the action.
 func (cfg cmdlineConfigUnix) Run() error {
 	if cfg.TLS != "" && cfg.TCPListen != "" && cfg.TCPTLS == "" {
@@ -420,14 +412,6 @@ func (cfg cmdlineConfigUnix) Run() error {
 	}
 
 	return nil
-}
-
-func (cfg cmdlineConfigWindows) Prepare() error {
-	return utils.MarkforNoReload(cfg)
-}
-
-func (cfg cmdlineConfigWindows) CheckReload() error {
-	return utils.ErrorIfCfgChanged(cfg)
 }
 
 // Run runs the action.

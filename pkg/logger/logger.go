@@ -135,6 +135,14 @@ func (cfg loglevelCfg) Init() error {
 	return nil
 }
 
+func (cfg loglevelCfg) MarkforNoReload() error {
+	return nil
+}
+
+func (cfg loglevelCfg) ErrorIfCfgChanged() error {
+	return nil
+}
+
 func (cfg loglevelCfg) Reload() error {
 	return cfg.Init()
 }
@@ -144,6 +152,14 @@ type traceCfg struct{}
 func (cfg traceCfg) Prepare() error {
 	SetShowTrace(true)
 
+	return nil
+}
+
+func (cfg traceCfg) MarkforNoReload() error {
+	return nil
+}
+
+func (cfg traceCfg) ErrorIfCfgChanged() error {
 	return nil
 }
 

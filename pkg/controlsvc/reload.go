@@ -14,7 +14,7 @@ type (
 )
 
 // ReloadCL is ParseAndRun closure set with the initial receptor arguments.
-var ReloadCL func(bool) error
+var ReloadCL func([]string) error
 
 func (t *reloadCommandType) InitFromString(params string) (ControlCommand, error) {
 	c := &reloadCommand{}
@@ -35,7 +35,7 @@ func (c *reloadCommand) ControlFunc(nc *netceptor.Netceptor, cfo ControlFuncOper
 	logger.Debug("Reloading")
 
 	// Do a quick check to catch any yaml errors before canceling backends
-	err := ReloadCL(true)
+	err := ReloadCL([]string{"ErrorIfCfgChanged"})
 	if err != nil {
 		cfr["Success"] = false
 		cfr["Error"] = err.Error()
@@ -53,7 +53,7 @@ func (c *reloadCommand) ControlFunc(nc *netceptor.Netceptor, cfo ControlFuncOper
 
 	nc.CancelBackends()
 	// ReloadCL is a ParseAndRun closure, set in receptor.go/main()
-	err = ReloadCL(false)
+	err = ReloadCL([]string{"Reload"})
 	if err != nil {
 		cfr["Success"] = false
 		cfr["Error"] = err.Error()
@@ -66,7 +66,7 @@ func (c *reloadCommand) ControlFunc(nc *netceptor.Netceptor, cfo ControlFuncOper
 }
 
 func init() {
-	ReloadCL = func(dryRun bool) error {
+	ReloadCL = func(toRun []string) error {
 		return fmt.Errorf("reload function not set")
 	}
 }
