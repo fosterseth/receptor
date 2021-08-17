@@ -339,6 +339,22 @@ func (cfg websocketDialerCfg) Run() error {
 	return nil
 }
 
+func (cfg websocketDialerCfg) DisableReload() error {
+	return nil
+}
+
+func (cfg websocketListenerCfg) DisableReload() error {
+	return nil
+}
+
+func (cfg websocketDialerCfg) ErrorCfgChangedOrNew() error {
+	return nil
+}
+
+func (cfg websocketListenerCfg) ErrorCfgChangedOrNew() error {
+	return nil
+}
+
 func (cfg websocketDialerCfg) Reload() error {
 	return runFuncs([]func() error{cfg.Prepare, cfg.Run})
 }

@@ -21,7 +21,7 @@ func cfgToString(cfg interface{}) (string, error) {
 	return cfgStr, nil
 }
 
-func MarkforNoReload(cfg interface{}) error {
+func DisableReload(cfg interface{}) error {
 	cfgStr, err := cfgToString(cfg)
 	if err != nil {
 		return err
@@ -31,23 +31,15 @@ func MarkforNoReload(cfg interface{}) error {
 	return nil
 }
 
-func isPresent(cfg interface{}) bool {
+func ErrorCfgChangedOrNew(cfg interface{}) error {
 	cfgStr, _ := cfgToString(cfg)
-	_, ok := cfgNotReloadable[cfgStr]
-	if ok {
+	if _, ok := cfgNotReloadable[cfgStr]; ok {
 		cfgNotReloadable[cfgStr] = true
+
+		return nil
 	}
 
-	return ok
-}
-
-func ErrorIfCfgChanged(cfg interface{}) error {
-	fmt.Printf("%v", cfgNotReloadable)
-	if !isPresent(cfg) {
-		return fmt.Errorf("%v was modified or added. Must restart receptor for changes to take effect", reflect.TypeOf(cfg))
-	}
-
-	return nil
+	return fmt.Errorf("%v was modified or added. Must restart receptor for changes to take effect", reflect.TypeOf(cfg))
 }
 
 func reset() {
@@ -56,9 +48,8 @@ func reset() {
 	}
 }
 
-func ErrorIfAbsent() error {
+func ErrorCfgAbsent() error {
 	defer reset()
-	fmt.Printf("%v", cfgNotReloadable)
 	for _, v := range cfgNotReloadable {
 		if !v {
 			return fmt.Errorf("non-reloadable items were removed from configuration file. Must restart receptor for changes to take effect")
@@ -68,18 +59,8 @@ func ErrorIfAbsent() error {
 	return nil
 }
 
-func EnableReload(cfg interface{}) error {
-	cfgStr, err := cfgToString(cfg)
-	if err != nil {
-		return err
-	}
-	cfgNotReloadable[cfgStr] = true
-
-	return nil
-}
-
 func init() {
 	cfgNotReloadable = make(map[string]bool)
-	cmdline.RegisterFuncForApp("ErrorIfCfgChanged", ErrorIfCfgChanged)
-	cmdline.RegisterFuncForApp("MarkforNoReload", MarkforNoReload)
+	cmdline.RegisterFuncForApp("ErrorCfgChangedOrNew", ErrorCfgChangedOrNew)
+	cmdline.RegisterFuncForApp("DisableReload", DisableReload)
 }

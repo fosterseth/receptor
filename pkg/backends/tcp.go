@@ -309,12 +309,20 @@ func (cfg tcpDialerCfg) Run() error {
 	return nil
 }
 
-func (cfg tcpDialerCfg) CheckReload() error {
-	return utils.EnableReload(cfg)
+func (cfg tcpDialerCfg) DisableReload() error {
+	return nil
 }
 
-func (cfg tcpListenerCfg) CheckReload() error {
-	return utils.EnableReload(cfg)
+func (cfg tcpListenerCfg) DisableReload() error {
+	return nil
+}
+
+func (cfg tcpDialerCfg) ErrorCfgChangedOrNew() error {
+	return nil
+}
+
+func (cfg tcpListenerCfg) ErrorCfgChangedOrNew() error {
+	return nil
 }
 
 func (cfg tcpDialerCfg) Reload() error {

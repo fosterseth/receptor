@@ -35,7 +35,7 @@ func (c *reloadCommand) ControlFunc(nc *netceptor.Netceptor, cfo ControlFuncOper
 	logger.Debug("Reloading")
 
 	// Do a quick check to catch any yaml errors before canceling backends
-	err := ReloadCL([]string{"ErrorIfCfgChanged"})
+	err := ReloadCL([]string{"ErrorCfgChangedOrNew"})
 	if err != nil {
 		cfr["Success"] = false
 		cfr["Error"] = err.Error()
@@ -43,7 +43,7 @@ func (c *reloadCommand) ControlFunc(nc *netceptor.Netceptor, cfo ControlFuncOper
 		return cfr, err
 	}
 
-	err = utils.ErrorIfAbsent()
+	err = utils.ErrorCfgAbsent()
 	if err != nil {
 		cfr["Success"] = false
 		cfr["Error"] = err

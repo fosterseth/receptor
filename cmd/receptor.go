@@ -85,6 +85,19 @@ func (cfg nullBackendCfg) Run() error {
 	return nil
 }
 
+func (cfg nullBackendCfg) DisableReload() error {
+	return nil
+}
+
+func (cfg nullBackendCfg) ErrorCfgChangedOrNew() error {
+	return nil
+}
+
+func (cfg nullBackendCfg) Reload() error {
+	return cfg.Run()
+}
+
+
 func main() {
 	cl := cmdline.NewCmdline()
 	cl.AddConfigType("node", "Node configuration of this instance", nodeCfg{}, cmdline.Required, cmdline.Singleton)
@@ -126,7 +139,7 @@ func main() {
 		}
 	}
 
-	err := cl.ParseAndRun(osArgs, []string{"Init", "Prepare", "MarkforNoReload", "Run"}, cmdline.ShowHelpIfNoArgs)
+	err := cl.ParseAndRun(osArgs, []string{"Init", "Prepare", "DisableReload", "Run"}, cmdline.ShowHelpIfNoArgs)
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
 		os.Exit(1)

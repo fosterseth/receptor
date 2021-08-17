@@ -341,6 +341,22 @@ func (cfg udpDialerCfg) Run() error {
 	return nil
 }
 
+func (cfg udpDialerCfg) DisableReload() error {
+	return nil
+}
+
+func (cfg udpListenerCfg) DisableReload() error {
+	return nil
+}
+
+func (cfg udpDialerCfg) ErrorCfgChangedOrNew() error {
+	return nil
+}
+
+func (cfg udpListenerCfg) ErrorCfgChangedOrNew() error {
+	return nil
+}
+
 func (cfg udpDialerCfg) Reload() error {
 	return runFuncs([]func() error{cfg.Prepare, cfg.Run})
 }
