@@ -451,6 +451,10 @@ func (w *Workceptor) GetResults(unitID string, startPos int64, doneChan chan str
 		return nil, err
 	}
 	resultChan := make(chan []byte)
+	defer func() {
+		logger.Debug("closing resultChan")
+		close(resultChan)
+	}()
 	go func() {
 		unitdir := path.Join(w.dataDir, unitID)
 		stdoutFilename := path.Join(unitdir, "stdout")
