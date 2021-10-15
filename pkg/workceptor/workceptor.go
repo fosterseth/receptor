@@ -451,11 +451,17 @@ func (w *Workceptor) GetResults(unitID string, startPos int64, doneChan chan str
 		return nil, err
 	}
 	resultChan := make(chan []byte)
-	defer func() {
-		logger.Debug("closing resultChan")
-		close(resultChan)
-	}()
+	closeOnce := sync.Once{}
+	resultClose := func() {
+		closeOnce.Do(func() {
+			close(resultChan)
+		})
+	}
 	go func() {
+		logger.Info("==== GetResults for %s", unitID)
+		defer func() {
+			logger.Info("==== returning from GetResults for %s", unitID)
+		}()
 		unitdir := path.Join(w.dataDir, unitID)
 		stdoutFilename := path.Join(unitdir, "stdout")
 		// Wait for stdout file to exist
@@ -466,35 +472,49 @@ func (w *Workceptor) GetResults(unitID string, startPos int64, doneChan chan str
 			case err == nil:
 			case os.IsNotExist(err):
 				if IsComplete(unit.Status().State) {
-					close(resultChan)
+					resultClose()
 					logger.Warning("Unit completed without producing any stdout\n")
 
 					return
 				}
 				if sleepOrDone(doneChan, 250*time.Millisecond) {
+					resultClose()
+
 					return
 				}
 
 				continue
 			default:
 				logger.Error("Error accessing stdout file: %s\n", err)
+				resultClose()
 
 				return
 			}
 
 			break
 		}
+		// logger.Info("Exit For Loop 1")
 		var stdout *os.File
 		var err error
 		filePos := startPos
 		for {
+			if unit.Status().State == WorkStateFailed {
+				resultClose()
+
+				return
+			}
+			// logger.Info("In For Loop 2")
 			if sleepOrDone(doneChan, 250*time.Millisecond) {
+				resultClose()
+
 				return
 			}
 			if stdout == nil {
 				stdout, err = os.Open(stdoutFilename)
 				if err != nil {
-					continue
+					logger.Error("could not open stdout file, after successfully opening the file previously")
+
+					return
 				}
 			}
 			for err == nil {
@@ -502,11 +522,13 @@ func (w *Workceptor) GetResults(unitID string, startPos int64, doneChan chan str
 				newPos, err = stdout.Seek(filePos, 0)
 				if err != nil {
 					logger.Warning("Seek error processing stdout: %s\n", err)
+					resultClose()
 
 					return
 				}
 				if newPos != filePos {
 					logger.Warning("Seek error processing stdout\n")
+					resultClose()
 
 					return
 				}
@@ -522,13 +544,14 @@ func (w *Workceptor) GetResults(unitID string, startPos int64, doneChan chan str
 				err = stdout.Close()
 				if err != nil {
 					logger.Error("Error closing stdout\n")
+					resultClose()
 
 					return
 				}
 				stdout = nil
 				stdoutSize := stdoutSize(unitdir)
 				if IsComplete(unit.Status().State) && stdoutSize >= unit.Status().StdoutSize {
-					close(resultChan)
+					resultClose()
 					logger.Info("Stdout complete - closing channel for: %s \n", unitID)
 
 					return
@@ -537,6 +560,7 @@ func (w *Workceptor) GetResults(unitID string, startPos int64, doneChan chan str
 				continue
 			} else if err != nil {
 				logger.Error("Error reading stdout: %s\n", err)
+				resultClose()
 
 				return
 			}
