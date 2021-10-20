@@ -216,9 +216,6 @@ func (s *Server) RunControlSession(conn net.Conn) {
 			cfo := &sockControl{
 				conn: conn,
 			}
-			defer func() {
-				cfo.Close()
-			}()
 			var cfr map[string]interface{}
 			var cc ControlCommand
 			if jsonData == nil {
@@ -227,7 +224,9 @@ func (s *Server) RunControlSession(conn net.Conn) {
 				cc, err = ct.InitFromJSON(jsonData)
 			}
 			if err == nil {
-				cfr, err = cc.ControlFunc(s.nc, cfo)
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				cfr, err = cc.ControlFunc(ctx, s.nc, cfo)
 			}
 			if err != nil {
 				logger.Error(err.Error())
