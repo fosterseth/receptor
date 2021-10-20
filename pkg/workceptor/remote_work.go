@@ -292,6 +292,7 @@ func (rw *remoteUnit) monitorRemoteStatus(mw *utils.JobContext, forRelease bool)
 	if conn == nil {
 		return
 	}
+	writeStatusFailures := 0
 	for {
 		if conn == nil {
 			conn, reader = rw.getConnection(mw)
@@ -339,6 +340,16 @@ func (rw *remoteUnit) monitorRemoteStatus(mw *utils.JobContext, forRelease bool)
 			return
 		}
 		rw.UpdateBasicStatus(si.State, si.Detail, si.StdoutSize)
+		if rw.LastUpdateError() != nil {
+			writeStatusFailures++
+			if writeStatusFailures > 3 {
+				logger.Error("Exceeded retries for updating status file for work unit %s", rw.unitID)
+
+				return
+			}
+		} else {
+			writeStatusFailures = 0
+		}
 		if err != nil {
 			logger.Error("Error saving local status file: %s\n", err)
 

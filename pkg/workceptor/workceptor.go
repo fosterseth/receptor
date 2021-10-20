@@ -457,21 +457,23 @@ func (w *Workceptor) GetResults(ctx context.Context, unitID string, startPos int
 			close(resultChan)
 		})
 	}
+	unitdir := path.Join(w.dataDir, unitID)
+	stdoutFilename := path.Join(unitdir, "stdout")
 	var stdout *os.File
+	ctxChild, cancel := context.WithCancel(ctx)
 	go func() {
 		defer func() {
 			err = stdout.Close()
 			if err != nil {
-				logger.Error("Error closing stdout")
+				logger.Error("Error closing stdout %s", stdout.Name())
 			}
 			resultClose()
+			cancel()
 		}()
-		unitdir := path.Join(w.dataDir, unitID)
-		stdoutFilename := path.Join(unitdir, "stdout")
+
 		// Wait for stdout file to exist
 		for {
 			stdout, err = os.Open(stdoutFilename)
-
 			switch {
 			case err == nil:
 			case os.IsNotExist(err):
@@ -494,6 +496,29 @@ func (w *Workceptor) GetResults(ctx context.Context, unitID string, startPos int
 			break
 		}
 		filePos := startPos
+		statChan := make(chan struct{}, 1)
+		go func() {
+			failures := 0
+			for {
+				select {
+				case <-ctxChild.Done():
+					return
+				case <-time.After(1 * time.Second):
+					_, err := os.Stat(stdoutFilename)
+					if os.IsNotExist(err) {
+						failures++
+						if failures > 3 {
+							logger.Error("Exceeded retries for reading stdout %s", stdoutFilename)
+							statChan <- struct{}{}
+
+							return
+						}
+					} else {
+						failures = 0
+					}
+				}
+			}
+		}()
 		for {
 			if sleepOrDone(ctx.Done(), 250*time.Millisecond) {
 				return
@@ -504,6 +529,8 @@ func (w *Workceptor) GetResults(ctx context.Context, unitID string, startPos int
 				}
 				select {
 				case <-ctx.Done():
+					return
+				case <-statChan:
 					return
 				default:
 					var newPos int64
