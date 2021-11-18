@@ -152,6 +152,9 @@ func (c *reloadCommand) ControlFunc(ctx context.Context, nc *netceptor.Netceptor
 		toRun = make(map[string]struct{})
 	}()
 
+	cfr := make(map[string]interface{})
+	cfr["Success"] = true
+
 	// Do a quick check to catch any yaml errors before canceling backends
 	err := reloadParseAndRun([]string{"PreReload"})
 	if err != nil {
@@ -166,26 +169,27 @@ func (c *reloadCommand) ControlFunc(ctx context.Context, nc *netceptor.Netceptor
 		return handleError(err, 3)
 	}
 
+	if len(toRun) == 0 {
+		logger.Debug("Nothing to reload")
+		return cfr, nil
+	}
+
 	if _, ok := toRun["ReloadBackend"]; ok {
 		nc.CancelBackends()
 	}
 
-	fmt.Printf("toRun %v\n", toRun)
-
-	toRunStr := []string{"PreReload"}
+	toRunStr := []string{}
 	for callableStr := range(toRun) {
 		toRunStr = append(toRunStr, callableStr)
 	}
 	// reloadParseAndRun is a ParseAndRun closure, set in receptor.go/main()
+	fmt.Printf("toRun %v\n", toRun)
 	err = reloadParseAndRun(toRunStr)
 	if err != nil {
 		return handleError(err, 4)
 	}
 
-	cfr := make(map[string]interface{})
-	cfr["Success"] = true
-
-	// set old config to new config
+	// set old config to new config, only if successful
 	cfgPrevious = make(map[string]struct{})
 	for cfg := range(cfgNext) {
 		cfgPrevious[cfg] = struct{}{}
