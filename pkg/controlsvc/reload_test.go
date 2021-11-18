@@ -2,8 +2,6 @@ package controlsvc
 
 import (
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestReload(t *testing.T) {
@@ -21,23 +19,28 @@ func TestReload(t *testing.T) {
 		{filename: "reload_test_yml/syntax_error.yml", modifyError: true, absentError: true},
 		{filename: "reload_test_yml/successful_reload.yml", modifyError: false, absentError: false},
 	}
-	err := parseConfigForReload("reload_test_yml/init.yml", false)
-	assert.NoError(t, err)
-	assert.Len(t, cfgNotReloadable, 5)
+	err := parseConfig("reload_test_yml/init.yml", cfgPrevious)
+	if err != nil {
+		t.Fatal("could not parse a good-syntax yaml")
+	}
+	if len(cfgPrevious) != 6 {
+		t.Fatal("incorrect cfgPrevious length")
+	}
 
 	for _, s := range scenarios {
 		t.Logf("%s", s.filename)
-		err = parseConfigForReload(s.filename, true)
-		if s.modifyError {
-			assert.Error(t, err)
+		parseConfig(s.filename, cfgNext)
+		err = checkReload()
+		// t.Logf("%v\n", cfgNext)
+		if s.modifyError || s.absentError {
+			if err == nil {
+				t.Fatal("error expected")
+			}
 		} else {
-			assert.NoError(t, err)
+			if err != nil {
+				t.Fatal("did not expect error")
+			}
 		}
-		err = cfgAbsent()
-		if s.absentError {
-			assert.Error(t, err)
-		} else {
-			assert.NoError(t, err)
-		}
+		resetAfterReload()
 	}
 }
