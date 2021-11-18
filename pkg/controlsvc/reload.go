@@ -22,28 +22,24 @@ var reloadParseAndRun = func(toRun []string) error {
 	return fmt.Errorf("no configuration file was provided, reload function not set")
 }
 
-var cfgNotReloadable = make(map[string]bool)
+var cfgPrevious = make(map[string]struct{})
+var cfgNext = make(map[string]struct{})
 
-var reloadableActions = []string{
-	"tcp-peer",
-	"tcp-listener",
-	"ws-peer",
-	"ws-listener",
-	"udp-peer",
-	"udp-listener",
-	"local-only",
+type actionCallables struct {
+	isReloadable            bool
+	callWhenModifiedorAdded string
+	callWhenAbsent          string
 }
 
-func isReloadable(cfg string) bool {
-	// checks if top-level keys (e.g. tcp-peer) are in the list of reloadable
-	// actions
-	for _, a := range reloadableActions {
-		if strings.HasPrefix(cfg, a) {
-			return true
-		}
-	}
-
-	return false
+var reloadableActions = map[string]actionCallables {
+	"tcp-peer":     actionCallables{callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
+	"tcp-listener": actionCallables{callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
+	"ws-peer":      actionCallables{callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
+	"ws-listener":  actionCallables{callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
+	"udp-peer":     actionCallables{callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
+	"udp-listener": actionCallables{callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
+	"local-only":   actionCallables{callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
+	"log-level":    actionCallables{callWhenModifiedorAdded: "ReloadLogger", callWhenAbsent: "InitLogger"},
 }
 
 func getActionKeyword(cfg string) string {
@@ -59,20 +55,9 @@ func getActionKeyword(cfg string) string {
 	return action
 }
 
-func parseConfigForReload(filename string, checkReload bool) error {
-	// cfgNotReloadable is a map, each key being the full configuration item
-	// e.g. "work-command: worktype: echosleep command: bash params:..."
-	// Initially all values of map are set to false,
-	// e.g. cfgNotReloadable["work-command: worktype: echosleep..."] = false
-	//
-	// Upon reload, the config is reparsed and each item is checked.
-	// if item not in cfgNotReloadable, return error
-	// if item is in cfgNotReloadable, set it to true
-	// e.g. cfgNotReloadable["work-command: worktype: echosleep..."] = true
-	//
-	// Finally, cfgAbsent() will loop through the map and check for any remaining
-	// items that are still false. This means the original item is missing from
-	// the config, and an error will be thrown
+var toRun = make(map[string]struct{})
+
+func parseConfig(filename string, cfgMap map[string]struct{}) error {
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return err
@@ -88,37 +73,41 @@ func parseConfigForReload(filename string, checkReload bool) error {
 			return err
 		}
 		cfg := string(cfgBytes)
-		if !isReloadable(cfg) {
-			if checkReload {
-				if _, ok := cfgNotReloadable[cfg]; !ok {
-					action := getActionKeyword(cfg)
-
-					return fmt.Errorf("a non-reloadable config action '%s' was modified or added. Must restart receptor for these changes to take effect", action)
-				}
-				cfgNotReloadable[cfg] = true
-			} else {
-				cfgNotReloadable[cfg] = false
-			}
-		}
+		cfgMap[cfg] = struct{}{}
 	}
 
 	return nil
 }
 
-func cfgAbsent() error {
-	// checks to see if any item in cfgNotReloadable has a value of false,
-	// if so, that means an unreloadable item has been removed from the config
-	defer func() {
-		for k := range cfgNotReloadable {
-			cfgNotReloadable[k] = false
-		}
-	}()
+func checkReload() error {
 
-	for cfg, v := range cfgNotReloadable {
-		if !v {
-			action := getActionKeyword(cfg)
+	// Determine which items from the old config have been modified or added
+	for cfg := range(cfgNext) {
+		action := getActionKeyword(cfg)
+		_, isReloadable := reloadableActions[action]
+		_, inPrevious := cfgPrevious[cfg]
+		if !isReloadable && !inPrevious {
+
+			return fmt.Errorf("a non-reloadable config action '%s' was modified or added. Must restart receptor for these changes to take effect", action)
+		}
+		if isReloadable && !inPrevious {
+			callableStr := reloadableActions[action].callWhenModifiedorAdded
+			toRun[callableStr] = struct{}{}
+		}
+	}
+
+	// Determine which items from the old config are absent
+	for cfg := range(cfgPrevious) {
+		action := getActionKeyword(cfg)
+		_, isReloadable := reloadableActions[action]
+		_, inNext := cfgNext[cfg]
+		if !isReloadable && !inNext {
 
 			return fmt.Errorf("a non-reloadable config action '%s' was removed. Must restart receptor for changes to take effect", action)
+		}
+		if isReloadable && !inNext {
+			callableStr := reloadableActions[action].callWhenAbsent
+			toRun[callableStr] = struct{}{}
 		}
 	}
 
@@ -130,11 +119,7 @@ func InitReload(cPath string, fParseAndRun func([]string) error) error {
 	configPath = cPath
 	reloadParseAndRun = fParseAndRun
 
-	return parseConfigForReload(configPath, false)
-}
-
-func checkReload() error {
-	return parseConfigForReload(configPath, true)
+	return parseConfig(configPath, cfgPrevious)
 }
 
 func (t *reloadCommandType) InitFromString(params string) (ControlCommand, error) {
@@ -162,6 +147,10 @@ func (c *reloadCommand) ControlFunc(ctx context.Context, nc *netceptor.Netceptor
 	// Reload command stops all backends, and re-runs the ParseAndRun() on the
 	// initial config file
 	logger.Debug("Reloading")
+	defer func () {
+		cfgNext = make(map[string]struct{})
+		toRun = make(map[string]struct{})
+	}()
 
 	// Do a quick check to catch any yaml errors before canceling backends
 	err := reloadParseAndRun([]string{"PreReload"})
@@ -169,27 +158,38 @@ func (c *reloadCommand) ControlFunc(ctx context.Context, nc *netceptor.Netceptor
 		return handleError(err, 4)
 	}
 
+	err = parseConfig(configPath, cfgNext)
+
 	// check if non-reloadable items have been added or modified
 	err = checkReload()
 	if err != nil {
 		return handleError(err, 3)
 	}
 
-	// check if non-reloadable items have been removed
-	err = cfgAbsent()
-	if err != nil {
-		return handleError(err, 3)
+	if _, ok := toRun["ReloadBackend"]; ok {
+		nc.CancelBackends()
 	}
 
-	nc.CancelBackends()
+	fmt.Printf("toRun %v\n", toRun)
+
+	toRunStr := []string{"PreReload"}
+	for callableStr := range(toRun) {
+		toRunStr = append(toRunStr, callableStr)
+	}
 	// reloadParseAndRun is a ParseAndRun closure, set in receptor.go/main()
-	err = reloadParseAndRun([]string{"PreReload", "Reload"})
+	err = reloadParseAndRun(toRunStr)
 	if err != nil {
 		return handleError(err, 4)
 	}
 
 	cfr := make(map[string]interface{})
 	cfr["Success"] = true
+
+	// set old config to new config
+	cfgPrevious = make(map[string]struct{})
+	for cfg := range(cfgNext) {
+		cfgPrevious[cfg] = struct{}{}
+	}
 
 	return cfr, nil
 }
