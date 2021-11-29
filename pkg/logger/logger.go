@@ -143,11 +143,16 @@ func (cfg traceCfg) Prepare() error {
 	return nil
 }
 
-func init() {
+func InitLogger() {
+	fmt.Println("InitLogger")
 	logLevel = InfoLevel
 	showTrace = false
 	log.SetOutput(os.Stdout)
 	log.SetFlags(log.Ldate | log.Ltime)
+}
+
+func init() {
+	InitLogger()
 
 	cmdline.RegisterConfigTypeForApp("receptor-logging",
 		"log-level", "Set specific log level output", loglevelCfg{}, cmdline.Singleton)

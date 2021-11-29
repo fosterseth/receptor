@@ -32,18 +32,18 @@ var (
 
 type actionCallables struct {
 	callWhenModifiedorAdded string
-	callWhenAbsent          string
+	callWhenAbsent          func()
 }
 
 var reloadableActions = map[string]actionCallables{
-	"tcp-peer":     {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
-	"tcp-listener": {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
-	"ws-peer":      {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
-	"ws-listener":  {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
-	"udp-peer":     {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
-	"udp-listener": {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
-	"local-only":   {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
-	"log-level":    {callWhenModifiedorAdded: "ReloadLogger", callWhenAbsent: "InitLogger"},
+	"tcp-peer":     {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: nil},
+	"tcp-listener": {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: nil},
+	"ws-peer":      {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: nil},
+	"ws-listener":  {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: nil},
+	"udp-peer":     {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: nil},
+	"udp-listener": {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: nil},
+	"local-only":   {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: nil},
+	"log-level":    {callWhenModifiedorAdded: "ReloadLogger", callWhenAbsent: logger.InitLogger},
 }
 
 func getActionKeyword(cfg string) string {
@@ -59,7 +59,10 @@ func getActionKeyword(cfg string) string {
 	return action
 }
 
-var toRun = make(map[string]struct{})
+var (
+	toRun       = make(map[string]struct{})
+	toRunAbsent = make(map[string]func())
+)
 
 func parseConfig(filename string, cfgMap map[string]struct{}) error {
 	data, err := ioutil.ReadFile(filename)
@@ -107,8 +110,10 @@ func checkReload() error {
 			return fmt.Errorf("a non-reloadable config action '%s' was removed. Must restart receptor for changes to take effect", action)
 		}
 		if isReloadable && !inNext {
-			callableStr := reloadableActions[action].callWhenAbsent
-			toRun[callableStr] = struct{}{}
+			callableFunc := reloadableActions[action].callWhenAbsent
+			if callableFunc != nil {
+				toRunAbsent[action] = callableFunc
+			}
 		}
 	}
 
@@ -177,7 +182,7 @@ func (c *reloadCommand) ControlFunc(ctx context.Context, nc *netceptor.Netceptor
 		return handleError(err, 3)
 	}
 
-	if len(toRun) == 0 {
+	if len(toRun) == 0 && len(toRunAbsent) == 0 {
 		logger.Debug("Nothing to reload")
 
 		return cfr, nil
@@ -197,6 +202,12 @@ func (c *reloadCommand) ControlFunc(ctx context.Context, nc *netceptor.Netceptor
 	err = reloadParseAndRun(toRunStr)
 	if err != nil {
 		return handleError(err, 4)
+	}
+
+	// run callables for items that are absent
+	fmt.Printf("toRunAbsent %v\n", toRunAbsent)
+	for _, f := range toRunAbsent {
+		f()
 	}
 
 	// set old config to new config, only if successful
