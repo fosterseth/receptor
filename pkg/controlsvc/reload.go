@@ -36,13 +36,13 @@ type actionCallables struct {
 }
 
 var reloadableActions = map[string]actionCallables{
-	"tcp-peer":     {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
-	"tcp-listener": {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
-	"ws-peer":      {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
-	"ws-listener":  {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
-	"udp-peer":     {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
-	"udp-listener": {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
-	"local-only":   {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: ""},
+	"tcp-peer":     {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: "ReloadBackend"},
+	"tcp-listener": {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: "ReloadBackend"},
+	"ws-peer":      {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: "ReloadBackend"},
+	"ws-listener":  {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: "ReloadBackend"},
+	"udp-peer":     {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: "ReloadBackend"},
+	"udp-listener": {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: "ReloadBackend"},
+	"local-only":   {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: "ReloadBackend"},
 	"log-level":    {callWhenModifiedorAdded: "ReloadLogger", callWhenAbsent: "InitLogger"},
 }
 

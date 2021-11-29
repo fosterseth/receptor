@@ -143,6 +143,19 @@ func (cfg traceCfg) Prepare() error {
 	return nil
 }
 
+func (cfg loglevelCfg) ReloadLogger() error {
+
+	return cfg.Init()
+}
+
+func (cfg loglevelCfg) InitLogger() error {
+
+	fmt.Println("We are now resetting the logger")
+	cfg.Level = "info"
+
+	return cfg.Init()
+}
+
 func init() {
 	logLevel = InfoLevel
 	showTrace = false
