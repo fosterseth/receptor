@@ -125,12 +125,24 @@ type loglevelCfg struct {
 }
 
 func (cfg loglevelCfg) Init() error {
-	var err error
 	val, err := GetLogLevelByName(cfg.Level)
 	if err != nil {
 		return err
 	}
 	SetLogLevel(val)
+
+	return nil
+}
+
+func (cfg loglevelCfg) ReloadLogger() error {
+	return cfg.Init()
+}
+
+func (cfg loglevelCfg) PreReload() error {
+	_, err := GetLogLevelByName(cfg.Level)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
