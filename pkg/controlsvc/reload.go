@@ -17,33 +17,28 @@ type (
 	reloadCommand     struct{}
 )
 
-var configPath = ""
-
-var mu sync.Mutex
-
-var reloadParseAndRun = func(toRun []string) error {
-	return fmt.Errorf("no configuration file was provided, reload function not set")
-}
-
 var (
-	cfgPrevious = make(map[string]struct{})
-	cfgNext     = make(map[string]struct{})
+	configPath       = ""
+	mu               sync.Mutex
+	cfgPrevious      = make(map[string]struct{})
+	cfgNext          = make(map[string]struct{})
+	backendModified  = false
+	loglevelModified = false
 )
 
-type actionCallables struct {
-	callWhenModifiedorAdded string
-	callWhenAbsent          string
+var reloadParseAndRun = func(toRun []string) error {
+	return fmt.Errorf("no configuration file was provided")
 }
 
-var reloadableActions = map[string]actionCallables{
-	"tcp-peer":     {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: "ReloadBackend"},
-	"tcp-listener": {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: "ReloadBackend"},
-	"ws-peer":      {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: "ReloadBackend"},
-	"ws-listener":  {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: "ReloadBackend"},
-	"udp-peer":     {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: "ReloadBackend"},
-	"udp-listener": {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: "ReloadBackend"},
-	"local-only":   {callWhenModifiedorAdded: "ReloadBackend", callWhenAbsent: "ReloadBackend"},
-	"log-level":    {callWhenModifiedorAdded: "ReloadLogger", callWhenAbsent: "InitLogger"},
+var reloadableActions = map[string]*bool{
+	"tcp-peer":     &backendModified,
+	"tcp-listener": &backendModified,
+	"ws-peer":      &backendModified,
+	"ws-listener":  &backendModified,
+	"udp-peer":     &backendModified,
+	"udp-listener": &backendModified,
+	"local-only":   &backendModified,
+	"log-level":    &loglevelModified,
 }
 
 func getActionKeyword(cfg string) string {
@@ -58,8 +53,6 @@ func getActionKeyword(cfg string) string {
 
 	return action
 }
-
-var toRun = make(map[string]struct{})
 
 func parseConfig(filename string, cfgMap map[string]struct{}) error {
 	data, err := ioutil.ReadFile(filename)
@@ -84,31 +77,29 @@ func parseConfig(filename string, cfgMap map[string]struct{}) error {
 }
 
 func checkReload() error {
-	// Determine which items from the old config have been modified or added
+	// Determine which items from the old config have been added or modified
 	for cfg := range cfgNext {
 		action := getActionKeyword(cfg)
 		_, isReloadable := reloadableActions[action]
 		_, inPrevious := cfgPrevious[cfg]
 		if !isReloadable && !inPrevious {
-			return fmt.Errorf("a non-reloadable config action '%s' was modified or added. Must restart receptor for these changes to take effect", action)
+			return fmt.Errorf("a non-reloadable config action '%s' was added or modified. Must restart receptor for these changes to take effect", action)
 		}
 		if isReloadable && !inPrevious {
-			callableStr := reloadableActions[action].callWhenModifiedorAdded
-			toRun[callableStr] = struct{}{}
+			*reloadableActions[action] = true
 		}
 	}
 
-	// Determine which items from the old config are absent
+	// Determine which items from the old config are no longer present, or have been modified
 	for cfg := range cfgPrevious {
 		action := getActionKeyword(cfg)
 		_, isReloadable := reloadableActions[action]
 		_, inNext := cfgNext[cfg]
 		if !isReloadable && !inNext {
-			return fmt.Errorf("a non-reloadable config action '%s' was removed. Must restart receptor for changes to take effect", action)
+			return fmt.Errorf("a non-reloadable config action '%s' was removed or modified. Must restart receptor for changes to take effect", action)
 		}
 		if isReloadable && !inNext {
-			callableStr := reloadableActions[action].callWhenAbsent
-			toRun[callableStr] = struct{}{}
+			*reloadableActions[action] = true
 		}
 	}
 
@@ -117,7 +108,8 @@ func checkReload() error {
 
 func resetAfterReload() {
 	cfgNext = make(map[string]struct{})
-	toRun = make(map[string]struct{})
+	backendModified = false
+	loglevelModified = false
 }
 
 // InitReload initializes objects required before reload commands are issued.
@@ -177,24 +169,39 @@ func (c *reloadCommand) ControlFunc(ctx context.Context, nc *netceptor.Netceptor
 		return handleError(err, 3)
 	}
 
-	if len(toRun) == 0 {
+	if !loglevelModified && !backendModified {
 		logger.Debug("Nothing to reload")
 
 		return cfr, nil
 	}
 
-	if _, ok := toRun["ReloadBackend"]; ok {
+	toRun := []string{}
+	if backendModified {
 		nc.CancelBackends()
+		toRun = append(toRun, "ReloadBackend")
+	}
+
+	loglevelPresent := false
+	for cfg := range cfgNext {
+		loglevelPresent = getActionKeyword(cfg) == "log-level"
+		if loglevelPresent {
+			break
+		}
 	}
 
 	// convert the map into a string, which is what the ParseAndRun expects
-	toRunStr := []string{}
-	for callableStr := range toRun {
-		toRunStr = append(toRunStr, callableStr)
+
+	if loglevelPresent && loglevelModified {
+		toRun = append(toRun, "ReloadLogger")
 	}
+
+	if !loglevelPresent {
+		logger.SetLogLevel(3)
+	}
+
 	// reloadParseAndRun is a ParseAndRun closure, set in receptor.go/main()
 	fmt.Printf("toRun %v\n", toRun)
-	err = reloadParseAndRun(toRunStr)
+	err = reloadParseAndRun(toRun)
 	if err != nil {
 		return handleError(err, 4)
 	}

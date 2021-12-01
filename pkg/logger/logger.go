@@ -144,16 +144,21 @@ func (cfg traceCfg) Prepare() error {
 }
 
 func (cfg loglevelCfg) ReloadLogger() error {
-
 	return cfg.Init()
 }
 
-func (cfg loglevelCfg) InitLogger() error {
+func (cfg loglevelCfg) InitLogger() {
+	logLevel = InfoLevel
+	SetLogLevel(logLevel)
+}
 
-	fmt.Println("We are now resetting the logger")
-	cfg.Level = "info"
+func (cfg loglevelCfg) PreReload() error {
+	_, err := GetLogLevelByName(cfg.Level)
+	if err != nil {
+		return err
+	}
 
-	return cfg.Init()
+	return nil
 }
 
 func init() {
