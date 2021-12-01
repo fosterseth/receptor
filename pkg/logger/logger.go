@@ -147,9 +147,8 @@ func (cfg loglevelCfg) ReloadLogger() error {
 	return cfg.Init()
 }
 
-func (cfg loglevelCfg) InitLogger() {
+func InitLogger() {
 	logLevel = InfoLevel
-	SetLogLevel(logLevel)
 }
 
 func (cfg loglevelCfg) PreReload() error {
@@ -162,7 +161,7 @@ func (cfg loglevelCfg) PreReload() error {
 }
 
 func init() {
-	logLevel = InfoLevel
+	InitLogger()
 	showTrace = false
 	log.SetOutput(os.Stdout)
 	log.SetFlags(log.Ldate | log.Ltime)

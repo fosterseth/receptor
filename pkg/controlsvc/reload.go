@@ -24,6 +24,7 @@ var (
 	cfgNext          = make(map[string]struct{})
 	backendModified  = false
 	loglevelModified = false
+	loglevelPresent  = false
 )
 
 var reloadParseAndRun = func(toRun []string) error {
@@ -103,6 +104,14 @@ func checkReload() error {
 		}
 	}
 
+	// check if log-level is defined
+	for cfg := range cfgNext {
+		loglevelPresent = getActionKeyword(cfg) == "log-level"
+		if loglevelPresent {
+			break
+		}
+	}
+
 	return nil
 }
 
@@ -110,6 +119,7 @@ func resetAfterReload() {
 	cfgNext = make(map[string]struct{})
 	backendModified = false
 	loglevelModified = false
+	loglevelPresent = false
 }
 
 // InitReload initializes objects required before reload commands are issued.
@@ -181,22 +191,12 @@ func (c *reloadCommand) ControlFunc(ctx context.Context, nc *netceptor.Netceptor
 		toRun = append(toRun, "ReloadBackend")
 	}
 
-	loglevelPresent := false
-	for cfg := range cfgNext {
-		loglevelPresent = getActionKeyword(cfg) == "log-level"
-		if loglevelPresent {
-			break
-		}
-	}
-
-	// convert the map into a string, which is what the ParseAndRun expects
-
 	if loglevelPresent && loglevelModified {
 		toRun = append(toRun, "ReloadLogger")
 	}
 
 	if !loglevelPresent {
-		logger.SetLogLevel(3)
+		logger.InitLogger()
 	}
 
 	// reloadParseAndRun is a ParseAndRun closure, set in receptor.go/main()

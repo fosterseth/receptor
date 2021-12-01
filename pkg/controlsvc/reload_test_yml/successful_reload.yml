@@ -3,14 +3,14 @@
     id: foo
     allowedpeers: bar
 
-- log-level: Info
+- log-level: Debug # reloadable
 - trace
 
 - tcp-peer:
     address: localhost:8001
 
 - tcp-peer:
-    address: localhost:8002 # is reloadable
+    address: localhost:8002 # reloadable
 
 - control-service:
     service: control

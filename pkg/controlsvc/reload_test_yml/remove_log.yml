@@ -3,7 +3,7 @@
     id: foo
     allowedpeers: bar
 
-#- log-level: Info #removed log here , relodable
+#- log-level: Info
 - trace
 
 - tcp-peer:
