@@ -51,4 +51,14 @@ jobs:
             quay.io/${{ github.repository }}:${{ github.event.release.tag_name }}
             quay.io/${{ github.repository }}:latest
 
+      - name: Create floating tag if dev version
+        run: |
+          echo "FLOATING_TAG=${{ github.event.release.tag_name }} | sed 's/[0-9]\+$//'" >> $GITHUB_ENV
+        if: contains(github.event.release.tag_name, 'dev')
 
+      - name: Push floating tag to Quay
+        uses: akhilerm/tag-push-action@v2.0.0
+        with:
+          src: ghcr.io/${{ github.repository }}:${{ github.event.release.tag_name }}
+          dst: quay.io/${{ github.repository }}:${{ env.FLOATING_TAG }}
+        if: contains(github.event.release.tag_name, 'dev')
