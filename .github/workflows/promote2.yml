@@ -1,5 +1,5 @@
 ---
-name: Promote Release
+name: Promote Release 2
 on:
   release:
     types: [published]
