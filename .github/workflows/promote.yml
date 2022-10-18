@@ -26,14 +26,21 @@ jobs:
           dst: |
             quay.io/${{ github.repository }}:$TAG
             quay.io/${{ github.repository }}:latest
-      - name: Create floating tag if dev version
+  
+
+      - name: Check if floating tag is needed
         run: |
-          echo "FLOATING_TAG=`$TAG | sed 's/[0-9]\+$//'`" >> $GITHUB_ENV
-        if: contains($TAG, 'dev')
+          if [[ $TAG == *"dev" ]];
+          then
+           FLOATING_TAG = echo $TAG | sed 's/[0-9]\+$//'
+          else
+           FLOATING_TAG = $TAG
+          fi
+          echo $FLOATING_TAG >> $GITHUB_ENV
+           
 
       - name: Push floating tag to Quay
         uses: akhilerm/tag-push-action@v2.0.0
         with:
           src: ghcr.io/${{ github.repository }}:$TAG
           dst: quay.io/${{ github.repository }}:${{ env.FLOATING_TAG }}
-        if: contains($TAG, 'dev')
