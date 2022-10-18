@@ -16,21 +16,26 @@ jobs:
       - name: Log in to Quay
         run: |
           echo ${{ secrets.QUAY_TOKEN }} | docker login quay.io -u ${{ secrets.QUAY_USER }} --password-stdin
+          
+      - name: env
+        env:
+          TAG: v1.3.0.dev2
+          
       - name: Copy Image to Quay
         uses: akhilerm/tag-push-action@v2.0.0
         with:
-          src: ghcr.io/${{ github.repository }}:1.3.0.dev2
+          src: ghcr.io/${{ github.repository }}:{{ $TAG }}
           dst: |
-            quay.io/${{ github.repository }}:1.3.0.dev2
+            quay.io/${{ github.repository }}:{{ $TAG }}
             quay.io/${{ github.repository }}:latest
       - name: Create floating tag if dev version
         run: |
-          echo "FLOATING_TAG=`1.3.0.dev2 | sed 's/[0-9]\+$//'`" >> $GITHUB_ENV
-        if: contains('1.3.0.dev2', 'dev')
+          echo "FLOATING_TAG=`{{ $TAG }} | sed 's/[0-9]\+$//'`" >> $GITHUB_ENV
+        if: contains({{ $TAG }}, 'dev')
 
       - name: Push floating tag to Quay
         uses: akhilerm/tag-push-action@v2.0.0
         with:
-          src: ghcr.io/${{ github.repository }}:${{ github.event.release.tag_name }}
+          src: ghcr.io/${{ github.repository }}:{{ $TAG }}
           dst: quay.io/${{ github.repository }}:${{ env.FLOATING_TAG }}
-        if: contains('1.3.0.dev2', 'dev')
+        if: contains({{ $TAG }}, 'dev')
