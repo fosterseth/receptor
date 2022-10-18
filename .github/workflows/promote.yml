@@ -6,6 +6,8 @@ on:
 jobs:
   promote:
     runs-on: ubuntu-latest
+    env:
+      TAG: v1.3.0.dev2
     steps:
       - name: Checkout Receptor
         uses: actions/checkout@v2
@@ -16,10 +18,6 @@ jobs:
       - name: Log in to Quay
         run: |
           echo ${{ secrets.QUAY_TOKEN }} | docker login quay.io -u ${{ secrets.QUAY_USER }} --password-stdin
-          
-      - name: env
-        env:
-          TAG: v1.3.0.dev2
           
       - name: Copy Image to Quay
         uses: akhilerm/tag-push-action@v2.0.0
