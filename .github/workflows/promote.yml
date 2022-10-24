@@ -36,6 +36,7 @@ jobs:
           else
            FLOATING_TAG=$TAG >> $GITHUB_ENV
           fi
+          echo $GITHUB_ENV
            
 
       - name: Push floating tag to Quay
