@@ -32,9 +32,9 @@ jobs:
         run: |
           if [[ $TAG == *"dev"* ]];
           then
-           FLOATING_TAG = $(echo $TAG | sed 's/[0-9]\+$//')
+           FLOATING_TAG=$(echo $TAG | sed 's/[0-9]\+$//')
           else
-           FLOATING_TAG = $TAG
+           FLOATING_TAG=$TAG
           fi
           echo $FLOATING_TAG >> $GITHUB_ENV
            
