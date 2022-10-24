@@ -1,13 +1,14 @@
 ---
 name: Promote Release
 on:
-  workflow_dispatch
+  release:
+    types: [published]
 
 jobs:
   promote:
     runs-on: ubuntu-latest
     env:
-      TAG: v1.3.0.dev2
+      TAG: ${{github.event.release.tag_name}} 
     steps:
       - name: Checkout Receptor
         uses: actions/checkout@v2
@@ -42,4 +43,4 @@ jobs:
         uses: akhilerm/tag-push-action@v2.0.0
         with:
           src: ghcr.io/${{ github.repository }}:${{env.TAG}}
-          dst: quay.io/${{ github.repository }}:${{ env.FLOATING_TAG }}
+          dst: quay.io/${{ github.repository }}:${{env.FLOATING_TAG}}
