@@ -30,9 +30,9 @@ jobs:
 
       - name: Check if floating tag is needed
         run: |
-          if [[ $TAG == *"dev" ]];
+          if [[ $TAG == *"dev"* ]];
           then
-           FLOATING_TAG = echo $TAG | sed 's/[0-9]\+$//'
+           FLOATING_TAG = $(echo $TAG | sed 's/[0-9]\+$//')
           else
            FLOATING_TAG = $TAG
           fi
