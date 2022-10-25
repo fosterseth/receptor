@@ -4,6 +4,7 @@
 package workceptor
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -290,30 +291,6 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		return
 	}
 
-	// Open the pod log for stdout
-	logreq := kw.clientset.CoreV1().Pods(kw.pod.ObjectMeta.Namespace).GetLogs(kw.pod.Name, &corev1.PodLogOptions{
-		Container: "worker",
-		Follow:    true,
-	})
-	var logStream io.ReadCloser
-	for retries := 5; retries > 0; retries-- {
-		logStream, err = logreq.Stream(kw.ctx)
-		if err != nil {
-			logger.Warning("Problem opening stdout from pod %s, unit %s. Retrying.", kw.pod.Name, kw.unitID)
-			time.Sleep(time.Second * 5)
-		} else {
-			break
-		}
-	}
-	if err != nil {
-		errMsg := fmt.Sprintf("Error opening pod stream: %s", err)
-		kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
-		logger.Error(errMsg)
-
-		return
-	}
-	defer logStream.Close()
-
 	// Attach stdin stream to the pod
 	var exec remotecommand.Executor
 	if !skipStdin {
@@ -397,7 +374,6 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		kw.UpdateBasicStatus(WorkStateRunning, "Pod Running", stdout.Size())
 	}
 
-	// Actually run the streams.  This blocks until the pod finishes.
 	var errStdin error
 	var errStdout error
 	streamWait := sync.WaitGroup{}
@@ -418,17 +394,69 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 					break
 				}
 			}
-			if errStdin != nil {
-				logStream.Close()
-			}
 			streamWait.Done()
 		}()
 	}
+
 	go func() {
-		_, errStdout = io.Copy(stdout, logStream)
+		for {
+			var sinceTimeString string
+
+			if errStdin != nil {
+				break
+			}
+
+			kw.pod, err = kw.clientset.CoreV1().Pods(ked.KubeNamespace).Get(kw.ctx, ked.PodName, metav1.GetOptions{})
+			if err != nil {
+				errMsg = fmt.Sprintf("Error getting pod %s/%s: %s", ked.KubeNamespace, ked.PodName, err)
+				kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
+				logger.Error(errMsg)
+				break
+			}
+
+			if kw.pod.Status.Phase != corev1.PodRunning {
+				logger.Info("Pod %s/%s is not in Running state: %s", ked.KubeNamespace, ked.PodName, kw.pod.Status.Phase)
+				break
+			}
+
+			logReq := kw.clientset.CoreV1().Pods(kw.pod.ObjectMeta.Namespace).GetLogs(
+				kw.pod.Name, &corev1.PodLogOptions{
+					Container:  "worker",
+					Follow:     true,
+					Timestamps: true,
+					SinceTime:  parseTime(sinceTimeString),
+				},
+			)
+
+			logStream, err := logReq.Stream(kw.ctx)
+			if err != nil {
+				errMsg := fmt.Sprintf("Error opening pod %s/%s stream: %s", ked.KubeNamespace, ked.PodName, err)
+				kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
+				logger.Error(errMsg)
+				break
+			}
+
+			streamReader := bufio.NewReader(logStream)
+
+			for errStdin != nil { //check between every line read to see if i need to stop reading
+				line, err := streamReader.ReadString('\n')
+				if err != nil {
+					break
+				}
+				split := strings.SplitN(line, " ", 2)
+				sinceTimeString = split[0]
+				msg := split[1]
+				stdout.Write([]byte(msg))
+			}
+
+			logStream.Close()
+		}
+
 		streamWait.Done()
 	}()
+
 	streamWait.Wait()
+
 	close(finishedChan)
 	if errStdin != nil || errStdout != nil {
 		var errDetail string
@@ -445,6 +473,22 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		return
 	}
 	kw.UpdateBasicStatus(WorkStateSucceeded, "Finished", stdout.Size())
+}
+
+func parseTime(s string) *metav1.Time {
+	t, err := time.Parse(time.RFC3339, s)
+	if err == nil {
+		mt := metav1.NewTime(t)
+		return &mt
+	}
+
+	t, err = time.Parse(time.RFC3339Nano, s)
+	if err == nil {
+		mt := metav1.NewTime(t)
+		return &mt
+	}
+
+	return nil
 }
 
 func getDefaultInterface() (string, error) {
