@@ -407,7 +407,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 	}
 
 	go func() {
-		var sinceTimeString string
+		var sinceTime time.Time
 		for {
 			if errStdin != nil {
 				break
@@ -422,11 +422,14 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				break
 			}
 
-			if sinceTimeString != "" {
+			if !sinceTime.IsZero() {
 				if kw.pod.Status.Phase != corev1.PodRunning {
 					logger.Info("Pod %s/%s is not in Running state: %s", ked.KubeNamespace, ked.PodName, kw.pod.Status.Phase)
+
 					break
 				}
+
+				time.Sleep(5 * time.Second)
 			}
 
 			logReq := kw.clientset.CoreV1().Pods(kw.pod.ObjectMeta.Namespace).GetLogs(
@@ -434,7 +437,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 					Container:  "worker",
 					Follow:     true,
 					Timestamps: true,
-					SinceTime:  parseTime(sinceTimeString),
+					SinceTime:  &metav1.Time{Time: sinceTime},
 				},
 			)
 
@@ -450,7 +453,6 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 			streamReader := bufio.NewReader(logStream)
 			for errStdin == nil { // check between every line read to see if we need to stop reading
 				line, err := streamReader.ReadString('\n')
-				logger.Info(line)
 				if err != nil {
 					if err != io.EOF {
 						errStdout = err
@@ -459,9 +461,13 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 					break
 				}
 				split := strings.SplitN(line, " ", 2)
-				sinceTimeString = split[0]
+				timeStamp := parseTime(split[0])
+				if !timeStamp.After(sinceTime) {
+					continue
+				}
 				msg := split[1]
 				stdout.Write([]byte(msg))
+				sinceTime = *timeStamp
 			}
 
 			logStream.Close()
@@ -490,19 +496,15 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 	kw.UpdateBasicStatus(WorkStateSucceeded, "Finished", stdout.Size())
 }
 
-func parseTime(s string) *metav1.Time {
+func parseTime(s string) *time.Time {
 	t, err := time.Parse(time.RFC3339, s)
 	if err == nil {
-		mt := metav1.NewTime(t)
-
-		return &mt
+		return &t
 	}
 
 	t, err = time.Parse(time.RFC3339Nano, s)
 	if err == nil {
-		mt := metav1.NewTime(t)
-
-		return &mt
+		return &t
 	}
 
 	return nil
