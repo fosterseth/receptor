@@ -408,7 +408,6 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 
 	go func() {
 		var sinceTimeString string
-		retries := 5
 		for {
 			if errStdin != nil {
 				break
@@ -419,12 +418,6 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				errMsg = fmt.Sprintf("Error getting pod %s/%s: %s", ked.KubeNamespace, ked.PodName, err)
 				kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 				logger.Error(errMsg)
-				for retries > 0 {
-					time.Sleep(time.Second * 5)
-					retries--
-
-					continue
-				}
 
 				break
 			}
@@ -450,12 +443,6 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				errMsg := fmt.Sprintf("Error opening pod %s/%s stream: %s", ked.KubeNamespace, ked.PodName, err)
 				kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 				logger.Error(errMsg)
-				for retries > 0 {
-					time.Sleep(time.Second * 5)
-					retries--
-
-					continue
-				}
 
 				break
 			}
