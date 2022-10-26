@@ -383,45 +383,57 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		streamWait.Done()
 	} else {
 		go func() {
+			var local_error error
 			for retries := 5; retries > 0; retries-- {
-				errStdin = exec.Stream(remotecommand.StreamOptions{
+				local_error = exec.Stream(remotecommand.StreamOptions{
 					Stdin: stdin,
 					Tty:   false,
 				})
-				if errStdin != nil {
-					logger.Warning("Problem opening stdin to pod %s, unit %s. Retrying.", kw.pod.Name, kw.unitID)
+				if local_error != nil {
+					logger.Warning("Problem opening stdin to pod %s/%s, unit %s. Retrying. Error: %s",
+						kw.pod.Namespace,
+						kw.pod.Name,
+						kw.unitID,
+						local_error,
+					)
 					time.Sleep(time.Second * 5)
 				} else {
 					break
 				}
 			}
+			errStdin = local_error
 			streamWait.Done()
 		}()
 	}
 
 	go func() {
 		var sinceTimeString string
-		attempt := 1
+		retries := 5
 		for {
 			if errStdin != nil {
 				break
 			}
-			logger.Debug("Read stdout attempt %d for pod %s/%s", attempt, ked.KubeNamespace, ked.PodName)
-			attempt++
-			time.Sleep(time.Second * 1)
 
 			kw.pod, err = kw.clientset.CoreV1().Pods(ked.KubeNamespace).Get(kw.ctx, ked.PodName, metav1.GetOptions{})
 			if err != nil {
 				errMsg = fmt.Sprintf("Error getting pod %s/%s: %s", ked.KubeNamespace, ked.PodName, err)
 				kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 				logger.Error(errMsg)
-
+				for retries > 0 {
+					time.Sleep(time.Second * 5)
+					retries--
+					continue
+				}
 				break
 			}
 
 			if kw.pod.Status.Phase != corev1.PodRunning {
 				logger.Info("Pod %s/%s is not in Running state: %s", ked.KubeNamespace, ked.PodName, kw.pod.Status.Phase)
-
+				for retries > 0 {
+					time.Sleep(time.Second * 5)
+					retries--
+					continue
+				}
 				break
 			}
 
@@ -439,9 +451,15 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				errMsg := fmt.Sprintf("Error opening pod %s/%s stream: %s", ked.KubeNamespace, ked.PodName, err)
 				kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 				logger.Error(errMsg)
-
+				for retries > 0 {
+					time.Sleep(time.Second * 5)
+					retries--
+					continue
+				}
 				break
 			}
+
+			errStdout = err
 
 			streamReader := bufio.NewReader(logStream)
 			for errStdin == nil { // check between every line read to see if we need to stop reading
