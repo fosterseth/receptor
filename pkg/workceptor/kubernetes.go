@@ -429,16 +429,11 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				break
 			}
 
-			if kw.pod.Status.Phase != corev1.PodRunning {
-				logger.Info("Pod %s/%s is not in Running state: %s", ked.KubeNamespace, ked.PodName, kw.pod.Status.Phase)
-				for retries > 0 {
-					time.Sleep(time.Second * 5)
-					retries--
-
-					continue
+			if sinceTimeString != "" {
+				if kw.pod.Status.Phase != corev1.PodRunning {
+					logger.Info("Pod %s/%s is not in Running state: %s", ked.KubeNamespace, ked.PodName, kw.pod.Status.Phase)
+					break
 				}
-
-				break
 			}
 
 			logReq := kw.clientset.CoreV1().Pods(kw.pod.ObjectMeta.Namespace).GetLogs(
@@ -465,13 +460,12 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				break
 			}
 
-			errStdout = err
-
 			streamReader := bufio.NewReader(logStream)
 			for errStdin == nil { // check between every line read to see if we need to stop reading
 				line, err := streamReader.ReadString('\n')
 				logger.Info(line)
 				if err != nil {
+					errStdout = err
 					break
 				}
 				split := strings.SplitN(line, " ", 2)
