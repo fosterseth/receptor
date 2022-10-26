@@ -383,25 +383,25 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		streamWait.Done()
 	} else {
 		go func() {
-			var local_error error
+			var localErr error
 			for retries := 5; retries > 0; retries-- {
-				local_error = exec.Stream(remotecommand.StreamOptions{
+				localErr = exec.Stream(remotecommand.StreamOptions{
 					Stdin: stdin,
 					Tty:   false,
 				})
-				if local_error != nil {
+				if localErr != nil {
 					logger.Warning("Problem opening stdin to pod %s/%s, unit %s. Retrying. Error: %s",
 						kw.pod.Namespace,
 						kw.pod.Name,
 						kw.unitID,
-						local_error,
+						localErr,
 					)
 					time.Sleep(time.Second * 5)
 				} else {
 					break
 				}
 			}
-			errStdin = local_error
+			errStdin = localErr
 			streamWait.Done()
 		}()
 	}
@@ -422,8 +422,10 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				for retries > 0 {
 					time.Sleep(time.Second * 5)
 					retries--
+
 					continue
 				}
+
 				break
 			}
 
@@ -432,8 +434,10 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				for retries > 0 {
 					time.Sleep(time.Second * 5)
 					retries--
+
 					continue
 				}
+
 				break
 			}
 
@@ -454,8 +458,10 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				for retries > 0 {
 					time.Sleep(time.Second * 5)
 					retries--
+
 					continue
 				}
+
 				break
 			}
 
