@@ -465,7 +465,10 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				line, err := streamReader.ReadString('\n')
 				logger.Info(line)
 				if err != nil {
-					errStdout = err
+					if err != io.EOF {
+						errStdout = err
+					}
+
 					break
 				}
 				split := strings.SplitN(line, " ", 2)
