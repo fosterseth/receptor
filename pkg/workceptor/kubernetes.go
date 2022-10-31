@@ -383,7 +383,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		streamWait.Done()
 	} else {
 		go func() {
-			logging.Info("Starting stdin goroutine for %s", kw.UnitDir())
+			logger.Info("Starting stdin goroutine for %s", kw.UnitDir())
 			var localErr error
 			for retries := 5; retries > 0; retries-- {
 				localErr = exec.Stream(remotecommand.StreamOptions{
