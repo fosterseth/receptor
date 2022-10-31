@@ -409,7 +409,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 					kw.unitID,
 					ked.KubeNamespace,
 					ked.PodName,
-					localErr,
+					errStdin,
 				)
 				stdout.writer.Close() // this terminates the stdout io.Copy
 			}
@@ -504,7 +504,17 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 			// stream logs
 			// NOTE: if stdin fail stdout will be closed and this will exit
 			_, errStdout = io.Copy(stdout, logStream)
+			// if errStdout != nil {
+			// 	logger.Error("[%s] Error streaming stdout from pod %s/%s: %s",
+			// 		kw.unitID,
+			// 		ked.KubeNamespace,
+			// 		ked.PodName,
+			// 		errStdout,
+			// 	)
+			// 	return
+			// }
 			sinceTime = time.Now().Add(-1 * time.Second)
+			logger.Info("====yoloswag====")
 
 			logStream.Close()
 
