@@ -401,9 +401,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 					break
 				}
 			}
-			if true {
-				localErr := fmt.Errorf("testing")
-				time.Sleep(5 * time.Second)
+			if localErr != nil {
 				errStdin = localErr
 				logger.Error("[%s] Error opening stdin to pod %s/%s: %s",
 					kw.unitID,
@@ -426,7 +424,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 
 		for {
 			if errStdin != nil {
-				logger.Error("[%s] Terminating STDOUT stream due to terminated stdin", kw.unitID)
+				logger.Error("[%s] Terminating stdout goroutine due to errored stdin goroutine", kw.unitID)
 
 				return
 			}
@@ -435,7 +433,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 			for retries := 5; retries > 0; retries-- {
 				kw.pod, localErr = kw.clientset.CoreV1().Pods(ked.KubeNamespace).Get(kw.ctx, ked.PodName, metav1.GetOptions{})
 				if localErr != nil {
-					logger.Warning("[%s] Error retrieving pod %s/%s, unit %s. Retrying. Error: %s",
+					logger.Warning("[%s] Error retrieving pod %s/%s, retrying: %s",
 						kw.unitID,
 						ked.KubeNamespace,
 						ked.PodName,
@@ -475,7 +473,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 			for retries := 5; retries > 0; retries-- {
 				logStream, localErr = logReq.Stream(kw.ctx)
 				if localErr != nil {
-					logger.Warning("[%s] Error opening stdout from pod %s/%s. Retrying. Error: %s",
+					logger.Warning("[%s] Error opening stdout from pod %s/%s, retrying: %s",
 						kw.unitID,
 						ked.KubeNamespace,
 						ked.PodName,
@@ -489,7 +487,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 
 			// terminate goroutine if we can't open log stream
 			if localErr != nil {
-				errMsg := fmt.Sprintf("[%s] Error opening stdout from pod %s/%s. Retrying. Error: %s",
+				errMsg := fmt.Sprintf("[%s] Error opening stdout from pod %s/%s: %s",
 					kw.unitID,
 					ked.KubeNamespace,
 					ked.PodName,
@@ -504,17 +502,15 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 			// stream logs
 			// NOTE: if stdin fail stdout will be closed and this will exit
 			_, errStdout = io.Copy(stdout, logStream)
-			// if errStdout != nil {
-			// 	logger.Error("[%s] Error streaming stdout from pod %s/%s: %s",
-			// 		kw.unitID,
-			// 		ked.KubeNamespace,
-			// 		ked.PodName,
-			// 		errStdout,
-			// 	)
-			// 	return
-			// }
+			if errStdout != nil {
+				logger.Warning("[%s] Error streaming stdout from pod %s/%s: %s",
+					kw.unitID,
+					ked.KubeNamespace,
+					ked.PodName,
+					errStdout,
+				)
+			}
 			sinceTime = time.Now().Add(-1 * time.Second)
-			logger.Info("====yoloswag====")
 
 			logStream.Close()
 
@@ -523,10 +519,10 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 			for retries := 5; retries > 0; retries-- {
 				kw.pod, localErr = kw.clientset.CoreV1().Pods(ked.KubeNamespace).Get(kw.ctx, ked.PodName, metav1.GetOptions{})
 				if localErr != nil {
-					logger.Warning("Error retrieving pod %s/%s, unit %s. Retrying. Error: %s",
-						kw.pod.Namespace,
-						kw.pod.Name,
+					logger.Warning("[%s] Error retrieving pod %s/%s, retrying: %s",
 						kw.unitID,
+						ked.KubeNamespace,
+						ked.PodName,
 						localErr,
 					)
 					time.Sleep(10 * time.Millisecond)
@@ -538,10 +534,10 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 			// terminate goroutine if we can't retrieve the pod info
 			if localErr != nil {
 				errStdout = localErr
-				logger.Error("Error retrieving pod %s/%s, unit %s: %s",
-					kw.pod.Namespace,
-					kw.pod.Name,
+				logger.Error("[%s] Error retrieving pod %s/%s: %s",
 					kw.unitID,
+					ked.KubeNamespace,
+					ked.PodName,
 					localErr,
 				)
 				kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
