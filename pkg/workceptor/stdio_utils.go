@@ -24,7 +24,7 @@ func saveStdoutSize(unitdir string, stdoutSize int64) error {
 // stdoutWriter writes to a stdout file while also updating the status file.
 type stdoutWriter struct {
 	unitdir      string
-	writer       io.Writer
+	writer       io.WriteCloser
 	bytesWritten int64
 }
 

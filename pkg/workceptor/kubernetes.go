@@ -400,7 +400,8 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 					break
 				}
 			}
-			if localErr != nil {
+			if true {
+				time.Sleep(5 * time.Second)
 				errStdin = localErr
 				logger.Error("Error opening stdin to pod %s/%s, unit %s: %s",
 					kw.pod.Namespace,
@@ -408,12 +409,14 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 					kw.unitID,
 					localErr,
 				)
+				stdout.writer.Close() // this terminates the stdout io.Copy
 			}
 			streamWait.Done()
 		}()
 	}
 
 	go func() {
+		defer streamWait.Done()
 		var localErr error
 		// exit conditions:
 		// 1. for a Completed pod, receive last line of stdout
@@ -445,7 +448,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 					)
 					time.Sleep(time.Second)
 				} else {
-					break //exit retry loop
+					break // exit retry loop
 				}
 			}
 
@@ -466,10 +469,9 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 			// create log request
 			logReq := kw.clientset.CoreV1().Pods(kw.pod.ObjectMeta.Namespace).GetLogs(
 				kw.pod.Name, &corev1.PodLogOptions{
-					Container:  "worker",
-					Follow:     true,
-					Timestamps: true,
-					SinceTime:  &metav1.Time{Time: sinceTime},
+					Container: "worker",
+					Follow:    true,
+					SinceTime: &metav1.Time{Time: sinceTime},
 				},
 			)
 
@@ -510,6 +512,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 			// NOTE: at this point if stdin fail we will not terminate the stdout stream this is different from previous behavior
 			// TODO: determine if this behavior change cause a problem and maybe cause the goroutine to hang.
 			_, errStdout = io.Copy(stdout, logStream)
+			logger.Info("========== here ================")
 
 			// determine if we should open a new stream and continue
 			// attempting to retrieve the pod info, retry up to 5 times
@@ -547,7 +550,6 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				return
 			}
 		}
-		streamWait.Done()
 	}()
 
 	streamWait.Wait()
@@ -570,19 +572,19 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 	kw.UpdateBasicStatus(WorkStateSucceeded, "Finished", stdout.Size())
 }
 
-func parseTime(s string) *time.Time {
-	t, err := time.Parse(time.RFC3339, s)
-	if err == nil {
-		return &t
-	}
-
-	t, err = time.Parse(time.RFC3339Nano, s)
-	if err == nil {
-		return &t
-	}
-
-	return nil
-}
+// func parseTime(s string) *time.Time {
+// 	t, err := time.Parse(time.RFC3339, s)
+// 	if err == nil {
+// 		return &t
+// 	}
+//
+// 	t, err = time.Parse(time.RFC3339Nano, s)
+// 	if err == nil {
+// 		return &t
+// 	}
+//
+// 	return nil
+// }
 
 func getDefaultInterface() (string, error) {
 	nifs, err := net.Interfaces()
