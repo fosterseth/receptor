@@ -510,7 +510,6 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 			// NOTE: at this point if stdin fail we will not terminate the stdout stream this is different from previous behavior
 			// TODO: determine if this behavior change cause a problem and maybe cause the goroutine to hang.
 			_, errStdout = io.Copy(stdout, logStream)
-			streamWait.Done()
 
 			// determine if we should open a new stream and continue
 			// attempting to retrieve the pod info, retry up to 5 times
@@ -548,7 +547,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				return
 			}
 		}
-
+		streamWait.Done()
 	}()
 
 	streamWait.Wait()
