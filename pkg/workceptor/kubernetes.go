@@ -14,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	"cloud.google.com/go/logging"
 	"github.com/ansible/receptor/pkg/logger"
 	"github.com/ghjm/cmdline"
 	"github.com/google/shlex"
@@ -419,7 +418,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 	}
 
 	go func() {
-		logging.Info("Starting stdout goroutine for %s", kw.UnitDir())
+		logger.Info("Starting stdout goroutine for %s", kw.UnitDir())
 
 		defer streamWait.Done()
 		var localErr error
