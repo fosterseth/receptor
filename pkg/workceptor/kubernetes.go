@@ -403,6 +403,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				}
 			}
 			if true {
+				localErr := fmt.Errorf("testing")
 				time.Sleep(5 * time.Second)
 				errStdin = localErr
 				logger.Error("[%s] Error opening stdin to pod %s/%s: %s",
@@ -428,7 +429,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 			if errStdin != nil {
 				logger.Error("[%s] Terminating STDOUT stream due to terminated stdin", kw.unitID)
 
-				break
+				return
 			}
 
 			// attempting to retrieve the pod info, retry up to 5 times
