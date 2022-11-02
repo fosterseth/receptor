@@ -338,24 +338,16 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		}
 	}
 
-	// Check if we were cancelled before starting the streams
-	// select {
-	// case <-kw.ctx.Done():
-	// 	kw.UpdateBasicStatus(WorkStateFailed, "Cancelled", 0)
-
-	// 	return
-	// default:
-	// }
-
 	var stdinErr error
 	var stdoutErr error
 
 	// finishedChan signal the stdin and stdout monitoring goroutine to stop
 	finishedChan := make(chan struct{})
+
+	// this will signal the stdin and stdout monitoring goroutine to stop when this function returns
 	defer close(finishedChan)
 
 	stdinErrChan := make(chan struct{}) // signal that stdin goroutine have errored and stop stdout goroutine
-	// stdoutErrChan := make(chan struct{})
 
 	// open stdin reader that reads from the work unit's data directory
 	var stdin *stdinReader
@@ -448,7 +440,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 
 			if err != nil {
 				stdinErr = err
-				errMsg := fmt.Sprintf("[%] Error streaming stdin to pod %s/%s: %s",
+				errMsg := fmt.Sprintf("[%s]  Error streaming stdin to pod %s/%s: %s",
 					kw.unitID,
 					kw.pod.Namespace,
 					kw.pod.Name,
@@ -463,7 +455,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 					kw.UpdateBasicStatus(WorkStateRunning, "Pod Running", stdout.Size())
 				} else {
 					// this is probably not possible...
-					errMsg := fmt.Sprintf("[%] Error reading stdin: %s", kw.unitID, stdin.Error())
+					errMsg := fmt.Sprintf("[%s] Error reading stdin: %s", kw.unitID, stdin.Error())
 					logger.Error(errMsg)
 					kw.UpdateBasicStatus(WorkStateFailed, errMsg, stdout.Size())
 
@@ -473,6 +465,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		}()
 	}
 
+	// TODO: @seth continue and go through this goroutine
 	go func() {
 		defer streamWait.Done()
 
@@ -553,6 +546,8 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 					continue
 				}
 				msg := split[1]
+
+				//TODO: @seth capture error to ensure this goroutine return when stdout is closed
 				stdout.Write([]byte(msg))
 				numEOF = 0 // each time we read successfully, reset this counter
 				sinceTime = *timeStamp
