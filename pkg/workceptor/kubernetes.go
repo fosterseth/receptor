@@ -307,8 +307,6 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		}
 	}
 
-	// use kw.pod.Name and kw.pod.Namespace to get the pod instead of kew from this point onwards
-
 	// Attach stdin stream to the pod
 	var exec remotecommand.Executor
 	if !skipStdin {
@@ -370,6 +368,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				select {
 				case <-kw.ctx.Done():
 					stdin.reader.Close()
+
 					return
 				case <-finishedChan:
 				case <-stdin.Done():
@@ -394,9 +393,11 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		select {
 		case <-kw.ctx.Done():
 			stdout.writer.Close()
+
 			return
 		case <-stdinErrChan:
 			stdout.writer.Close()
+
 			return
 		case <-finishedChan:
 			return
@@ -480,15 +481,15 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 
 			// get pod, with retry
 			for retries := 5; retries > 0; retries-- {
-				kw.pod, err = kw.clientset.CoreV1().Pods(ked.KubeNamespace).Get(kw.ctx, ked.PodName, metav1.GetOptions{})
+				kw.pod, err = kw.clientset.CoreV1().Pods(kw.pod.Namespace).Get(kw.ctx, kw.pod.Name, metav1.GetOptions{})
 				if err == nil {
 					break
 				} else {
-					time.Sleep(5 * time.Second)
+					time.Sleep(100 * time.Millisecond)
 				}
 			}
 			if err != nil {
-				errMsg := fmt.Sprintf("Error getting pod %s/%s: %s", ked.KubeNamespace, ked.PodName, err)
+				errMsg := fmt.Sprintf("[%s] Error getting pod %s/%s: %s", kw.unitID, kw.pod.Namespace, kw.pod.Name, err)
 				kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 				logger.Error(errMsg)
 
@@ -509,11 +510,11 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				if err == nil {
 					break
 				} else {
-					time.Sleep(5 * time.Second)
+					time.Sleep(100 * time.Millisecond)
 				}
 			}
 			if err != nil {
-				errMsg := fmt.Sprintf("Error opening pod %s/%s stream: %s", ked.KubeNamespace, ked.PodName, err)
+				errMsg := fmt.Sprintf("[%s] Error opening pod %s/%s stream: %s", kw.unitID, kw.pod.Namespace, kw.pod.Name, err)
 				kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 				logger.Error(errMsg)
 
@@ -525,12 +526,12 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 			for stdinErr == nil { // check between every line read to see if we need to stop reading
 				line, err := streamReader.ReadString('\n')
 				if err == io.EOF {
-					logger.Debug("detected EOF for pod %s/%s, attempt %d", ked.KubeNamespace, ked.PodName, numEOF)
+					logger.Debug("[%s] detected EOF for pod %s/%s, attempt %d", kw.unitID, kw.pod.Namespace, kw.pod.Name, numEOF)
 					numEOF++
 					if numEOF <= 5 {
-						time.Sleep(500 * time.Millisecond)
+						time.Sleep(100 * time.Millisecond)
 
-						goto loopEnd
+						break
 					}
 
 					return
@@ -547,13 +548,12 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				}
 				msg := split[1]
 
-				//TODO: @seth capture error to ensure this goroutine return when stdout is closed
+				// TODO: @seth capture error to ensure this goroutine return when stdout is closed
 				stdout.Write([]byte(msg))
 				numEOF = 0 // each time we read successfully, reset this counter
 				sinceTime = *timeStamp
 			}
 
-		loopEnd:
 			logStream.Close()
 		}
 	}()
