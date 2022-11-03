@@ -282,7 +282,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		// create new pod if ked.PodName is empty
 		// NOTE: kw.createPod() will set ked using kw.UpdateFullStatus
 		if err := kw.createPod(nil); err != nil {
-			if err == ErrPodCompleted {
+			if err != ErrPodCompleted {
 				errMsg := fmt.Sprintf("[%s] Error creating pod: %s", kw.unitID, err)
 				kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 				logger.Error(errMsg)
@@ -297,9 +297,17 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		// resuming from a previously created pod
 		// TODO: retry if failed?
 		var err error
-		kw.pod, err = kw.clientset.CoreV1().Pods(ked.KubeNamespace).Get(kw.ctx, ked.PodName, metav1.GetOptions{})
+		// get pod, with retry
+		for retries := 5; retries > 0; retries-- {
+			kw.pod, err = kw.clientset.CoreV1().Pods(ked.KubeNamespace).Get(kw.ctx, ked.PodName, metav1.GetOptions{})
+			if err == nil {
+				break
+			} else {
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
 		if err != nil {
-			errMsg := fmt.Sprintf("[%s] Error getting pod: %s", kw.unitID, err)
+			errMsg := fmt.Sprintf("[%s] Error getting pod %s/%s: %s", kw.unitID, ked.KubeNamespace, ked.PodName, err)
 			kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 			logger.Error(errMsg)
 
