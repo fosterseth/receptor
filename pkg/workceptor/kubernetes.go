@@ -278,14 +278,17 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 	status := kw.Status()
 	ked := status.ExtraData.(*kubeExtraData)
 
-	if ked.PodName == "" {
+	podName := ked.PodName
+	podNamespace := ked.KubeNamespace
+
+	if podName == "" {
 		// create new pod if ked.PodName is empty
 		// NOTE: kw.createPod() will set ked using kw.UpdateFullStatus
 		if err := kw.createPod(nil); err != nil {
 			if err != ErrPodCompleted {
 				errMsg := fmt.Sprintf("[%s] Error creating pod: %s", kw.unitID, err)
-				kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 				logger.Error(errMsg)
+				kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 
 				return
 			}
@@ -293,13 +296,25 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 			// for newly created pod we need to streaming stdin
 			skipStdin = false
 		}
+
+		podName = ked.PodName
+		podNamespace = ked.KubeNamespace
 	} else {
+		if podNamespace == "" {
+			errMsg := fmt.Sprintf("[%s] Error creating pod: pod namespace is empty for pod %s",
+				kw.unitID,
+				podName,
+			)
+			logger.Error(errMsg)
+			kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
+
+			return
+		}
+
 		// resuming from a previously created pod
-		// TODO: retry if failed?
 		var err error
-		// get pod, with retry
 		for retries := 5; retries > 0; retries-- {
-			kw.pod, err = kw.clientset.CoreV1().Pods(ked.KubeNamespace).Get(kw.ctx, ked.PodName, metav1.GetOptions{})
+			kw.pod, err = kw.clientset.CoreV1().Pods(podName).Get(kw.ctx, podName, metav1.GetOptions{})
 			if err == nil {
 				break
 			} else {
@@ -307,9 +322,9 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 			}
 		}
 		if err != nil {
-			errMsg := fmt.Sprintf("[%s] Error getting pod %s/%s: %s", kw.unitID, ked.KubeNamespace, ked.PodName, err)
-			kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
+			errMsg := fmt.Sprintf("[%s] Error getting pod %s/%s: %s", kw.unitID, podNamespace, podName, err)
 			logger.Error(errMsg)
+			kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 
 			return
 		}
@@ -320,8 +335,8 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 	if !skipStdin {
 		req := kw.clientset.CoreV1().RESTClient().Post().
 			Resource("pods").
-			Name(kw.pod.Name).
-			Namespace(kw.pod.Namespace).
+			Name(podName).
+			Namespace(podNamespace).
 			SubResource("attach")
 
 		req.VersionedParams(
@@ -338,7 +353,8 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		var err error
 		exec, err = remotecommand.NewSPDYExecutor(kw.config, "POST", req.URL())
 		if err != nil {
-			kw.UpdateBasicStatus(WorkStateFailed, fmt.Sprintf("Error attaching to pod: %s", err), 0)
+			errMsg := fmt.Sprintf("[%s] Error creating SPDY executor: %s", kw.unitID, err)
+			kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 
 			return
 		}
