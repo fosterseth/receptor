@@ -313,7 +313,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		// resuming from a previously created pod
 		var err error
 		for retries := 5; retries > 0; retries-- {
-			kw.pod, err = kw.clientset.CoreV1().Pods(podName).Get(kw.ctx, podName, metav1.GetOptions{})
+			kw.pod, err = kw.clientset.CoreV1().Pods(podNamespace).Get(kw.ctx, podName, metav1.GetOptions{})
 			if err == nil {
 				break
 			} else {
@@ -571,8 +571,12 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				}
 				msg := split[1]
 
-				// TODO: @seth capture error to ensure this goroutine return when stdout is closed
-				stdout.Write([]byte(msg))
+				_, err = stdout.Write([]byte(msg))
+				if err != nil {
+					stdoutErr = fmt.Errorf("writing to stdout: %s", err)
+
+					return
+				}
 				numEOF = 0 // each time we read successfully, reset this counter
 				sinceTime = *timeStamp
 			}
