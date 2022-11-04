@@ -285,8 +285,8 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		// create new pod if ked.PodName is empty
 		if err := kw.createPod(nil); err != nil {
 			if err != ErrPodCompleted {
-				errMsg := fmt.Sprintf("[%s] Error creating pod: %s", kw.unitID, err)
-				logger.Error(errMsg)
+				errMsg := fmt.Sprintf("Error creating pod: %s", err)
+				kw.Error(errMsg)
 				kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 
 				return
@@ -300,11 +300,10 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		podNamespace = kw.pod.Namespace
 	} else {
 		if podNamespace == "" {
-			errMsg := fmt.Sprintf("[%s] Error creating pod: pod namespace is empty for pod %s",
-				kw.unitID,
+			errMsg := fmt.Sprintf("Error creating pod: pod namespace is empty for pod %s",
 				podName,
 			)
-			logger.Error(errMsg)
+			kw.Error(errMsg)
 			kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 
 			return
@@ -321,8 +320,8 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 			}
 		}
 		if err != nil {
-			errMsg := fmt.Sprintf("[%s] Error getting pod %s/%s: %s", kw.unitID, podNamespace, podName, err)
-			logger.Error(errMsg)
+			errMsg := fmt.Sprintf("Error getting pod %s/%s: %s", podNamespace, podName, err)
+			kw.Error(errMsg)
 			kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 
 			return
@@ -352,7 +351,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		var err error
 		exec, err = remotecommand.NewSPDYExecutor(kw.config, "POST", req.URL())
 		if err != nil {
-			errMsg := fmt.Sprintf("[%s] Error creating SPDY executor: %s", kw.unitID, err)
+			errMsg := fmt.Sprintf("Error creating SPDY executor: %s", err)
 			kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 
 			return
@@ -380,7 +379,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				skipStdin = true
 			} else {
 				errMsg := fmt.Sprintf("Error opening stdin file: %s", err)
-				logger.Error(errMsg)
+				kw.Error(errMsg)
 				kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 
 				return
@@ -405,7 +404,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 	stdout, err := newStdoutWriter(kw.UnitDir())
 	if err != nil {
 		errMsg := fmt.Sprintf("Error opening stdout file: %s", err)
-		logger.Error(errMsg)
+		kw.Error(errMsg)
 		kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 
 		return
@@ -450,8 +449,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				})
 				if err != nil {
 					// NOTE: io.EOF for stdin is handled by remotecommand and will not trigger this
-					logger.Warning("[%s] Error streaming stdin to pod %s/%s. Retrying: %s",
-						kw.unitID,
+					kw.Warning("Error streaming stdin to pod %s/%s. Retrying: %s",
 						podNamespace,
 						podName,
 						err,
@@ -464,13 +462,12 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 
 			if err != nil {
 				stdinErr = err
-				errMsg := fmt.Sprintf("[%s]  Error streaming stdin to pod %s/%s: %s",
-					kw.unitID,
+				errMsg := fmt.Sprintf("Error streaming stdin to pod %s/%s: %s",
 					podNamespace,
 					podName,
 					err,
 				)
-				logger.Error(errMsg)
+				kw.Error(errMsg)
 				kw.UpdateBasicStatus(WorkStateFailed, errMsg, stdout.Size())
 
 				close(stdinErrChan) // signal STDOUT goroutine to stop
@@ -479,8 +476,8 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 					kw.UpdateBasicStatus(WorkStateRunning, "Pod Running", stdout.Size())
 				} else {
 					// this is probably not possible...
-					errMsg := fmt.Sprintf("[%s] Error reading stdin: %s", kw.unitID, stdin.Error())
-					logger.Error(errMsg)
+					errMsg := fmt.Sprintf("Error reading stdin: %s", stdin.Error())
+					kw.Error(errMsg)
 					kw.UpdateBasicStatus(WorkStateFailed, errMsg, stdout.Size())
 
 					close(stdinErrChan) // signal STDOUT goroutine to stop
@@ -512,9 +509,9 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				}
 			}
 			if err != nil {
-				errMsg := fmt.Sprintf("[%s] Error getting pod %s/%s: %s", kw.unitID, podNamespace, podName, err)
+				errMsg := fmt.Sprintf("Error getting pod %s/%s: %s", podNamespace, podName, err)
 				kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
-				logger.Error(errMsg)
+				kw.Error(errMsg)
 
 				break
 			}
@@ -537,9 +534,9 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				}
 			}
 			if err != nil {
-				errMsg := fmt.Sprintf("[%s] Error opening pod %s/%s stream: %s", kw.unitID, podNamespace, podName, err)
+				errMsg := fmt.Sprintf("Error opening pod %s/%s stream: %s", podNamespace, podName, err)
 				kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
-				logger.Error(errMsg)
+				kw.Error(errMsg)
 
 				break
 			}
@@ -549,7 +546,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 			for stdinErr == nil { // check between every line read to see if we need to stop reading
 				line, err := streamReader.ReadString('\n')
 				if err == io.EOF {
-					logger.Debug("[%s] detected EOF for pod %s/%s, attempt %d", kw.unitID, podNamespace, podName, numEOF)
+					kw.Debug("detected EOF for pod %s/%s, attempt %d", podNamespace, podName, numEOF)
 					numEOF++
 					if numEOF <= 5 {
 						time.Sleep(100 * time.Millisecond)
