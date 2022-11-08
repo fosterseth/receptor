@@ -492,7 +492,8 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 
 		var sinceTime time.Time
 		var logStream io.ReadCloser
-		numEOF := 0 // resets to 0 on each successful read from pod stdout
+		eofRetries := 5
+		remainingEOFAttempts := eofRetries // resets on each successful read from pod stdout
 
 		for {
 			if stdinErr != nil {
@@ -505,7 +506,9 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				if err == nil {
 					break
 				} else {
-					time.Sleep(100 * time.Millisecond)
+					errMsg := fmt.Sprintf("Error getting pod %s/%s. Will retry %d more times.", podNamespace, podName, retries)
+					kw.Warning(errMsg)
+					time.Sleep(time.Second)
 				}
 			}
 			if err != nil {
@@ -530,11 +533,13 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				if err == nil {
 					break
 				} else {
-					time.Sleep(100 * time.Millisecond)
+					errMsg := fmt.Sprintf("Error opening log stream for pod %s/%s. Will retry %d more times.", podNamespace, podName, retries)
+					kw.Warning(errMsg)
+					time.Sleep(time.Second)
 				}
 			}
 			if err != nil {
-				errMsg := fmt.Sprintf("Error opening pod %s/%s stream: %s", podNamespace, podName, err)
+				errMsg := fmt.Sprintf("Error opening log stream for pod %s/%s: %s", podNamespace, podName, err)
 				kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
 				kw.Error(errMsg)
 
@@ -546,9 +551,9 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 			for stdinErr == nil { // check between every line read to see if we need to stop reading
 				line, err := streamReader.ReadString('\n')
 				if err == io.EOF {
-					kw.Debug("detected EOF for pod %s/%s, attempt %d", podNamespace, podName, numEOF)
-					numEOF++
-					if numEOF <= 5 {
+					kw.Debug("Detected EOF for pod %s/%s. Will retry %d more times.", podNamespace, podName, remainingEOFAttempts)
+					remainingEOFAttempts--
+					if remainingEOFAttempts > 0 {
 						time.Sleep(100 * time.Millisecond)
 
 						break
@@ -574,7 +579,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 
 					return
 				}
-				numEOF = 0 // each time we read successfully, reset this counter
+				remainingEOFAttempts = eofRetries // each time we read successfully, reset this counter
 				sinceTime = *timeStamp
 			}
 
