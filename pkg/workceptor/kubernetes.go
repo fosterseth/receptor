@@ -564,7 +564,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				if err != nil {
 					stdoutErr = err
 
-					break
+					return
 				}
 				split := strings.SplitN(line, " ", 2)
 				timeStamp := parseTime(split[0])
