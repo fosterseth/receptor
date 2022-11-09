@@ -493,6 +493,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		var sinceTime time.Time
 		var logStream io.ReadCloser
 		eofRetries := 5
+		successfulWrite := false
 		remainingEOFAttempts := eofRetries // resets on each successful read from pod stdout
 
 		for {
@@ -552,6 +553,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				line, err := streamReader.ReadString('\n')
 				if err == io.EOF {
 					kw.Debug("Detected EOF for pod %s/%s. Will retry %d more times.", podNamespace, podName, remainingEOFAttempts)
+					successfulWrite = false
 					remainingEOFAttempts--
 					if remainingEOFAttempts > 0 {
 						time.Sleep(100 * time.Millisecond)
@@ -568,7 +570,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				}
 				split := strings.SplitN(line, " ", 2)
 				timeStamp := parseTime(split[0])
-				if !timeStamp.After(sinceTime) {
+				if !timeStamp.After(sinceTime) && !successfulWrite {
 					continue
 				}
 				msg := split[1]
@@ -581,6 +583,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 				}
 				remainingEOFAttempts = eofRetries // each time we read successfully, reset this counter
 				sinceTime = *timeStamp
+				successfulWrite = true
 			}
 
 			logStream.Close()
