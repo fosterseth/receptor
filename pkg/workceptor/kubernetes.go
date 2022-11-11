@@ -486,10 +486,44 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		}()
 	}
 
-	// TODO: @seth continue and go through this goroutine
-	go func() {
+	noTimestamps := func() {
+		// Legacy method, for use on k8s < v1.23.14
+		// uses io.Copy to stream data from pod to stdout file
+		// known issues around this, as logstream can terminate due to log rotation
+		// or 4 hr timeout
 		defer streamWait.Done()
+		var logStream io.ReadCloser
+		logReq := kw.clientset.CoreV1().Pods(podNamespace).GetLogs(
+			podName, &corev1.PodLogOptions{
+				Container: "worker",
+				Follow:    true,
+			},
+		)
+		// get logstream, with retry
+		for retries := 5; retries > 0; retries-- {
+			logStream, err = logReq.Stream(kw.ctx)
+			if err == nil {
+				break
+			} else {
+				errMsg := fmt.Sprintf("Error opening log stream for pod %s/%s. Will retry %d more times.", podNamespace, podName, retries)
+				kw.Warning(errMsg)
+				time.Sleep(time.Second)
+			}
+		}
+		if err != nil {
+			errMsg := fmt.Sprintf("Error opening log stream for pod %s/%s: %s", podNamespace, podName, err)
+			kw.UpdateBasicStatus(WorkStateFailed, errMsg, 0)
+			kw.Error(errMsg)
 
+			return
+		}
+
+		_, stdoutErr = io.Copy(stdout, logStream)
+	}
+
+	withTimestamps := func() {
+		// preferred method for k8s >= 1.23.14
+		defer streamWait.Done()
 		var sinceTime time.Time
 		var logStream io.ReadCloser
 		eofRetries := 5
@@ -588,7 +622,15 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 
 			logStream.Close()
 		}
-	}()
+	}
+
+	// TODO: pass this in, set this globally, set on config, etc.
+	stdoutWithTimestamps := true //nolint:ifshort
+	if stdoutWithTimestamps {
+		go withTimestamps()
+	} else {
+		go noTimestamps()
+	}
 
 	streamWait.Wait()
 
