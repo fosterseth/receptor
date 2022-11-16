@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -486,7 +488,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		}()
 	}
 
-	noTimestamps := func() {
+	noReconnect := func() {
 		// Legacy method, for use on k8s < v1.23.14
 		// uses io.Copy to stream data from pod to stdout file
 		// known issues around this, as logstream can terminate due to log rotation
@@ -521,7 +523,7 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		_, stdoutErr = io.Copy(stdout, logStream)
 	}
 
-	withTimestamps := func() {
+	withReconnect := func() {
 		// preferred method for k8s >= 1.23.14
 		defer streamWait.Done()
 		var sinceTime time.Time
@@ -624,12 +626,13 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		}
 	}
 
-	// TODO: pass this in, set this globally, set on config, etc.
-	stdoutWithTimestamps := true //nolint:ifshort
-	if stdoutWithTimestamps {
-		go withTimestamps()
+	stdoutWithReconnect := shouldUseReconnect(kw)
+	if stdoutWithReconnect && stdoutErr == nil {
+		kw.Debug("streaming stdout with reconnect support")
+		go withReconnect()
 	} else {
-		go noTimestamps()
+		kw.Debug("streaming stdout with no reconnect support")
+		go noReconnect()
 	}
 
 	streamWait.Wait()
@@ -649,6 +652,63 @@ func (kw *kubeUnit) runWorkUsingLogger() {
 		return
 	}
 	kw.UpdateBasicStatus(WorkStateSucceeded, "Finished", stdout.Size())
+}
+
+func shouldUseReconnect(kw *kubeUnit) bool {
+	// Attempt to detect support for streaming from pod with timestamps based on
+	// Kubernetes server version
+	// In order to use reconnect method, Kubernetes server must be at least
+	//   v1.23.14
+	//   v1.24.8
+	//   v1.25.4
+	// These versions contain a critical patch that permits connecting to the
+	// logstream with timestamps enabled.
+	// Without the patch, stdout lines would be split after 4K characters into a
+	// new line, which will cause issues in Receptor.
+	// Can override the detection by setting the RECEPTOR_KUBE_SUPPORT_RECONNECT
+	// environment variable, e.g. true, TRUE, 1, false, FALSE, 0
+	env, ok := os.LookupEnv("RECEPTOR_KUBE_SUPPORT_RECONNECT")
+	if ok {
+		envBool, err := strconv.ParseBool(env)
+		if err != nil {
+			logger.Warning("RECEPTOR_KUBE_SUPPORT_RECONNECT=%s is not a truth value. Will auto-detect reconnect support.", env)
+		} else {
+			return envBool
+		}
+	}
+	serverVerInfo, err := kw.clientset.ServerVersion()
+	if err != nil {
+		logger.Warning("could not detect Kubernetes server version, will not use reconnect support")
+
+		return false
+	}
+	semver, err := version.ParseSemantic(serverVerInfo.String())
+	if err != nil {
+		logger.Warning("could parse Kubernetes server version %s, will not use reconnect support", serverVerInfo.String())
+
+		return false
+	}
+
+	// The patch was backported to minor version 23 and 24. We must check z stream
+	// based on the minor version
+	var compatibleVer string
+	switch serverVerInfo.Minor {
+	case "23":
+		compatibleVer = "v1.23.14"
+	case "24":
+		compatibleVer = "v1.24.8"
+	case "25":
+		compatibleVer = "v1.25.4"
+	}
+
+	if semver.AtLeast(version.MustParseSemantic(compatibleVer)) {
+		logger.Debug("Kubernetes version %s is at least %s, using reconnect support", serverVerInfo.GitVersion, compatibleVer)
+
+		return true
+	}
+	logger.Debug("Kubernetes version %s not at least %s, not using reconnect support", serverVerInfo.GitVersion, compatibleVer)
+
+	return false
 }
 
 func parseTime(s string) *time.Time {
