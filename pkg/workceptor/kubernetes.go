@@ -11,7 +11,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -665,23 +664,32 @@ func shouldUseReconnect(kw *kubeUnit) bool {
 	// logstream with timestamps enabled.
 	// Without the patch, stdout lines would be split after 4K characters into a
 	// new line, which will cause issues in Receptor.
+	// https://github.com/kubernetes/kubernetes/issues/77603
 	// Can override the detection by setting the RECEPTOR_KUBE_SUPPORT_RECONNECT
-	// environment variable, e.g. true, TRUE, 1, false, FALSE, 0
+	// accepted values: "enabled", "disabled", "auto" with "auto" being the default
+	// all invalid value will assume to be "auto"
+
 	env, ok := os.LookupEnv("RECEPTOR_KUBE_SUPPORT_RECONNECT")
 	if ok {
-		envBool, err := strconv.ParseBool(env)
-		if err != nil {
-			logger.Warning("RECEPTOR_KUBE_SUPPORT_RECONNECT=%s is not a truth value. Will auto-detect reconnect support.", env)
-		} else {
-			return envBool
+		switch env {
+		case "enabled":
+			return true
+		case "disabled":
+			return false
+		case "auto":
+			// continue
+		default:
+			// continue
 		}
 	}
+
 	serverVerInfo, err := kw.clientset.ServerVersion()
 	if err != nil {
 		logger.Warning("could not detect Kubernetes server version, will not use reconnect support")
 
 		return false
 	}
+
 	semver, err := version.ParseSemantic(serverVerInfo.String())
 	if err != nil {
 		logger.Warning("could parse Kubernetes server version %s, will not use reconnect support", serverVerInfo.String())
@@ -689,7 +697,7 @@ func shouldUseReconnect(kw *kubeUnit) bool {
 		return false
 	}
 
-	// The patch was backported to minor version 23 and 24. We must check z stream
+	// The patch was backported to minor version 23, 24 and 25. We must check z stream
 	// based on the minor version
 	var compatibleVer string
 	switch serverVerInfo.Minor {
@@ -971,6 +979,7 @@ func (kw *kubeUnit) connectToKube() error {
 	if err != nil {
 		return err
 	}
+
 	kw.clientset, err = kubernetes.NewForConfig(kw.config)
 	if err != nil {
 		return err
