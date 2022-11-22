@@ -699,14 +699,17 @@ func shouldUseReconnect(kw *kubeUnit) bool {
 
 	// The patch was backported to minor version 23, 24 and 25. We must check z stream
 	// based on the minor version
+	// if minor version == 24, compare with v1.24.8
+	// if minor version == 25, compare with v1.25.4
+	// all other minor versions compare with v1.23.14
 	var compatibleVer string
 	switch serverVerInfo.Minor {
-	case "23":
-		compatibleVer = "v1.23.14"
 	case "24":
 		compatibleVer = "v1.24.8"
 	case "25":
 		compatibleVer = "v1.25.4"
+	default:
+		compatibleVer = "v1.23.14"
 	}
 
 	if semver.AtLeast(version.MustParseSemantic(compatibleVer)) {
