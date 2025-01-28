@@ -416,12 +416,13 @@ func (kw *KubeUnit) KubeLoggingWithReconnect(streamWait *sync.WaitGroup, stdout 
 			msg := line
 			timestamp := ParseTime(split[0])
 			if timestamp != nil {
-				kw.GetWorkceptor().nc.GetLogger().Debug("No timestamp received, log line: '%s'", line)
 				if !timestamp.After(sinceTime) && !successfulWrite {
 					continue
 				}
 				sinceTime = *timestamp
 				msg = split[1]
+			} else {
+				kw.GetWorkceptor().nc.GetLogger().Debug("No timestamp received, log line: '%s'", line)
 			}
 
 			_, err = stdout.Write([]byte(msg))
