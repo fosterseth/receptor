@@ -250,13 +250,13 @@ func (cw *commandUnit) Status() *StatusFileData {
 // UnredactedStatus returns a copy of the status currently loaded in memory, including secrets.
 func (cw *commandUnit) UnredactedStatus() *StatusFileData {
 	cw.GetStatusLock().RLock()
-	defer cw.GetStatusLock().RUnlock()
 	status := cw.GetStatusWithoutExtraData()
 	ed, ok := cw.GetStatusCopy().ExtraData.(*CommandExtraData)
 	if ok {
 		edCopy := *ed
 		status.ExtraData = &edCopy
 	}
+	cw.GetStatusLock().RUnlock()
 
 	return status
 }

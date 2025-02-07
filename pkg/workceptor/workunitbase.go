@@ -402,7 +402,9 @@ func (bwu *BaseWorkUnit) MonitorLocalStatus() {
 	watcherErrors = make(chan error)
 
 	if bwu.watcher != nil {
+		bwu.statusLock.Lock()
 		err := bwu.watcher.Add(statusFile)
+		bwu.statusLock.Unlock()
 		if err == nil {
 			defer func() {
 				werr := bwu.watcher.Close()
