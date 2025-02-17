@@ -209,6 +209,14 @@ loop:
 			MainInstance.nc.GetLogger().Error("Error updating status file %s: %s", statusFilename, err)
 		}
 	}
+	err = stdin.Close()
+	if err != nil {
+		MainInstance.nc.GetLogger().Error("Error closing %s: %s", path.Join(unitdir, "stdin"), err)
+	}
+	err = stdout.Close()
+	if err != nil {
+		MainInstance.nc.GetLogger().Error("Error closing %s: %s", path.Join(unitdir, "stdout"), err)
+	}
 	os.Exit(cmd.ProcessState.ExitCode())
 
 	return nil

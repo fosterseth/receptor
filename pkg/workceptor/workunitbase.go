@@ -36,6 +36,7 @@ const (
 // WatcherWrapper is wrapping the fsnofity Watcher struct and exposing the Event chan within.
 type WatcherWrapper interface {
 	Add(name string) error
+	Remove(path string) error
 	Close() error
 	ErrorChannel() chan error
 	EventChannel() chan fsnotify.Event
@@ -47,6 +48,10 @@ type RealWatcher struct {
 
 func (rw *RealWatcher) Add(name string) error {
 	return rw.watcher.Add(name)
+}
+
+func (rw *RealWatcher) Remove(path string) error {
+	return rw.watcher.Remove(path)
 }
 
 func (rw *RealWatcher) Close() error {
@@ -407,9 +412,10 @@ func (bwu *BaseWorkUnit) MonitorLocalStatus() {
 		bwu.statusLock.Unlock()
 		if err == nil {
 			defer func() {
-				werr := bwu.watcher.Close()
-				if werr != nil {
-					bwu.w.nc.GetLogger().Error("Error in defer closing %s: %s", statusFile, err)
+				bwu.watcher.Remove(statusFile)
+				err = bwu.watcher.Close()
+				if err != nil {
+					bwu.w.nc.GetLogger().Error("Error closing watcher: %v", err)
 				}
 			}()
 			watcherEvents = bwu.watcher.EventChannel()
