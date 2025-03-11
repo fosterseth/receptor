@@ -30,6 +30,14 @@ var MaxIdleTimeoutForQuicConnections = 30 * time.Second
 // Having this variablized allows the tests to set KeepAliveForQuicConnections = False so that things will properly fail.
 var KeepAliveForQuicConnections = true
 
+type QuicStreamForConn interface {
+	quic.Stream
+}
+
+type QuicConnectionForConn interface {
+	quic.Connection
+}
+
 type acceptResult struct {
 	conn net.Conn
 	err  error
@@ -304,11 +312,26 @@ func (li *Listener) Addr() net.Addr {
 type Conn struct {
 	s        *Netceptor
 	pc       PacketConner
-	qc       quic.Connection
-	qs       quic.Stream
+	qc       QuicConnectionForConn
+	qs       QuicStreamForConn
 	doneChan chan struct{}
 	doneOnce *sync.Once
 	ctx      context.Context
+}
+
+// NewConn constructs a new Conn instance, so that the test package can create one.
+func NewConn(s *Netceptor, pc PacketConner, qc QuicConnectionForConn, qs QuicStreamForConn, doneChan chan struct{}, doneOnce *sync.Once, ctx context.Context) *Conn {
+	conn := &Conn{
+		s:        s,
+		pc:       pc,
+		qc:       qc,
+		qs:       qs,
+		doneChan: doneChan,
+		doneOnce: doneOnce,
+		ctx:      ctx,
+	}
+
+	return conn
 }
 
 // Dial returns a stream connection compatible with Go's net.Conn.
@@ -416,15 +439,7 @@ func (s *Netceptor) DialContext(ctx context.Context, node string, service string
 			return
 		}
 	}()
-	conn := &Conn{
-		s:        s,
-		pc:       pc,
-		qc:       qc,
-		qs:       qs,
-		doneChan: doneChan,
-		doneOnce: &sync.Once{},
-		ctx:      cctx,
-	}
+	conn := NewConn(s, pc, qc, qs, doneChan, &sync.Once{}, cctx)
 
 	return conn, nil
 }
