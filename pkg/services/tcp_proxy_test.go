@@ -80,9 +80,12 @@ func TestTCPProxyServiceInbound(t *testing.T) {
 			name:            "Fail to dial to the receptor network after accepting an inbound connection",
 			tlsServerConfig: nil,
 			calls: func() {
-				mockNetLib.EXPECT().Listen(gomock.Any(), gomock.Any()).Return(mockNetListener, nil).Times(1)
-				mockNetListener.EXPECT().Accept().Return(mockTCPConn, nil).AnyTimes()
-				mockNetceptor.EXPECT().Dial(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errors.New("failed to connect to Receptor network")).AnyTimes()
+				gomock.InOrder(
+					mockNetLib.EXPECT().Listen(gomock.Any(), gomock.Any()).Return(mockNetListener, nil).Times(1),
+					mockNetListener.EXPECT().Accept().Return(mockTCPConn, nil).AnyTimes(),
+					mockNetceptor.EXPECT().Dial(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errors.New("failed to connect to Receptor network")).AnyTimes(),
+					mockNetListener.EXPECT().Accept().Return(nil, errors.New("failed to accept a new connection")).AnyTimes(),
+				)
 			},
 		},
 		{
@@ -122,16 +125,20 @@ func TestTCPProxyServiceOutbound(t *testing.T) {
 	var mockNetceptor *mock_services.MockNetcForTCPProxy
 	var mockNetLib *mock_services.MockNetLib
 	var mockTLSLib *mock_services.MockTLSLib
-	var mockNetListener *mock_services.MockNetListenerTCP
 	var mockUtilsLib *mock_services.MockUtilsLib
+	var mockTCPConn *mock_services.MockTCPConn
+
+	myListener := netceptor.Listener{
+		AcceptChan: make(chan *netceptor.AcceptResult),
+		DoneChan:   make(chan struct{}),
+	}
 
 	type testCoverageItem struct {
 		name                 string
 		expectError          bool
 		expectedErrorMessage string
-		service              string
-		address              string
 		tlsClientConfig      *tls.Config
+		myAcceptResults      []netceptor.AcceptResult
 		calls                func()
 	}
 	testCases := []testCoverageItem{
@@ -145,34 +152,53 @@ func TestTCPProxyServiceOutbound(t *testing.T) {
 		},
 		{
 			name: "Fail to accept input connections",
+			myAcceptResults: []netceptor.AcceptResult{{
+				Conn: nil,
+				Err:  errors.New("connection acceptance failed"),
+			}},
 			calls: func() {
-				mockNetceptor.EXPECT().ListenAndAdvertise(gomock.Any(), gomock.Any(), gomock.Any()).Return(&netceptor.Listener{}, nil).Times(1)
-				mockNetListener.EXPECT().Accept().Return(nil, errors.New("connection acceptance failed")).AnyTimes()
+				mockNetceptor.EXPECT().ListenAndAdvertise(gomock.Any(), gomock.Any(), gomock.Any()).Return(&myListener, nil).Times(1)
 			},
 		},
 		{
 			name:            "Fail to dial through non-TLS TCP connection",
 			tlsClientConfig: nil,
+			myAcceptResults: []netceptor.AcceptResult{{
+				Conn: mockTCPConn,
+				Err:  nil,
+			}},
 			calls: func() {
-				mockNetceptor.EXPECT().ListenAndAdvertise(gomock.Any(), gomock.Any(), gomock.Any()).Return(&netceptor.Listener{}, nil).Times(1)
-				mockNetListener.EXPECT().Accept().Return(&netceptor.Conn{}, nil).AnyTimes()
+				mockNetceptor.EXPECT().ListenAndAdvertise(gomock.Any(), gomock.Any(), gomock.Any()).Return(&myListener, nil).Times(1)
 				mockNetLib.EXPECT().Dial(gomock.Any(), gomock.Any()).Return(nil, errors.New("non-TLS TCP dial failed")).AnyTimes()
 			},
 		},
 		{
 			name:            "Fail to dial through TLS TCP connection",
 			tlsClientConfig: &tls.Config{},
+			myAcceptResults: []netceptor.AcceptResult{{
+				Conn: mockTCPConn,
+				Err:  nil,
+			}},
 			calls: func() {
-				mockNetceptor.EXPECT().ListenAndAdvertise(gomock.Any(), gomock.Any(), gomock.Any()).Return(&netceptor.Listener{}, nil).Times(1)
-				mockNetListener.EXPECT().Accept().Return(&netceptor.Conn{}, nil).AnyTimes()
+				mockNetceptor.EXPECT().ListenAndAdvertise(gomock.Any(), gomock.Any(), gomock.Any()).Return(&myListener, nil).Times(1)
 				mockTLSLib.EXPECT().Dial(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, errors.New("TLS TCP dial failed")).AnyTimes()
 			},
 		},
 		{
-			name: "Complete connection bridge after successful non-TLS connection",
+			name:            "Complete connection bridge after successful non-TLS connection",
+			tlsClientConfig: &tls.Config{},
+			myAcceptResults: []netceptor.AcceptResult{
+				{
+					Conn: mockTCPConn,
+					Err:  nil,
+				},
+				{
+					Conn: nil,
+					Err:  errors.New("failed to accept a new connection"),
+				},
+			},
 			calls: func() {
-				mockNetceptor.EXPECT().ListenAndAdvertise(gomock.Any(), gomock.Any(), gomock.Any()).Return(&netceptor.Listener{}, nil).Times(1)
-				mockNetListener.EXPECT().Accept().Return(&netceptor.Conn{}, nil).AnyTimes()
+				mockNetceptor.EXPECT().ListenAndAdvertise(gomock.Any(), gomock.Any(), gomock.Any()).Return(&myListener, nil).Times(1)
 				mockTLSLib.EXPECT().Dial(gomock.Any(), gomock.Any(), gomock.Any()).Return(&tls.Conn{}, nil).AnyTimes()
 				mockUtilsLib.EXPECT().BridgeConns(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 			},
@@ -181,9 +207,14 @@ func TestTCPProxyServiceOutbound(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mockNetceptor, mockNetLib, mockTLSLib, mockNetListener, mockUtilsLib, _ = setUpTCPMocks(ctrl)
+			mockNetceptor, mockNetLib, mockTLSLib, _, mockUtilsLib, mockTCPConn = setUpTCPMocks(ctrl)
 			tc.calls()
-			err := TCPProxyServiceOutbound(mockNetceptor, tc.service, &tls.Config{}, tc.address, tc.tlsClientConfig, mockNetLib, mockTLSLib, mockUtilsLib)
+			go func() {
+				for _, message := range tc.myAcceptResults {
+					myListener.AcceptChan <- &message
+				}
+			}()
+			err := TCPProxyServiceOutbound(mockNetceptor, "", &tls.Config{}, "", tc.tlsClientConfig, mockNetLib, mockTLSLib, mockUtilsLib)
 			if tc.expectError {
 				if err == nil {
 					t.Errorf("TCPProxyServiceOutbound case failed to raise error")
