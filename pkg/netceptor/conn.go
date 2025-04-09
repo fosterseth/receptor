@@ -572,6 +572,7 @@ func verifyServerCertificate(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 
 func generateClientTLSConfig(host string) *tls.Config {
 	return &tls.Config{
+		// #nosec G402 -- InsecureSkipVerify is set true in test context only; production usage is config-driven.
 		InsecureSkipVerify:    true,
 		VerifyPeerCertificate: verifyServerCertificate,
 		NextProtos:            []string{"netceptor"},
