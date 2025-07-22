@@ -38,6 +38,12 @@ type QuicConnectionForConn interface {
 	quic.Connection
 }
 
+type QuicListenerForListener interface {
+	Accept(ctx context.Context) (quic.Connection, error)
+	Addr() net.Addr
+	Close() error
+}
+
 type AcceptResult struct {
 	Conn net.Conn
 	Err  error
@@ -47,10 +53,21 @@ type AcceptResult struct {
 type Listener struct {
 	s          *Netceptor
 	pc         PacketConner
-	ql         *quic.Listener
+	ql         QuicListenerForListener
 	AcceptChan chan *AcceptResult
 	DoneChan   chan struct{}
 	doneOnce   *sync.Once
+}
+
+func NewListener(s *Netceptor, pc PacketConner, ql QuicListenerForListener, acceptChan chan *AcceptResult, doneChan chan struct{}, doneOnce *sync.Once) *Listener {
+	return &Listener{
+		s:          s,
+		pc:         pc,
+		ql:         ql,
+		AcceptChan: acceptChan,
+		DoneChan:   doneChan,
+		doneOnce:   doneOnce,
+	}
 }
 
 // Internal implementation of Listen and ListenAndAdvertise.
@@ -125,14 +142,9 @@ func (s *Netceptor) listen(ctx context.Context, service string, tlscfg *tls.Conf
 			return
 		}
 	}()
-	li := &Listener{
-		s:          s,
-		pc:         pc,
-		ql:         ql,
-		AcceptChan: make(chan *AcceptResult),
-		DoneChan:   doneChan,
-		doneOnce:   &sync.Once{},
-	}
+	acceptChan := make(chan *AcceptResult)
+	syncOnce := &sync.Once{}
+	li := NewListener(s, pc, ql, acceptChan, doneChan, syncOnce)
 
 	go li.acceptLoop(ctx)
 
@@ -292,9 +304,13 @@ func (li *Listener) acceptLoop(ctx context.Context) {
 func (li *Listener) Accept() (net.Conn, error) {
 	select {
 	case ar := <-li.AcceptChan:
-		return ar.Conn, ar.Err
+		if ar == nil {
+			return nil, fmt.Errorf("listener accept channel closed")
+		} else {
+			return ar.Conn, ar.Err
+		}
 	case <-li.DoneChan:
-		return nil, fmt.Errorf("listener closed")
+		return nil, fmt.Errorf("listener done channel closed")
 	}
 }
 
