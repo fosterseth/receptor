@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/url"
 	"os"
@@ -226,23 +227,68 @@ func podRunningAndReady(kw KubeUnit) func(event watch.Event) (bool, error) {
 	return inner
 }
 
-func GetTimeoutOpenLogstream(kw *KubeUnit) int {
-	// RECEPTOR_OPEN_LOGSTREAM_TIMEOUT
-	// default: 1
-	openLogStreamTimeout := 1
-	envTimeout := os.Getenv("RECEPTOR_OPEN_LOGSTREAM_TIMEOUT")
+func (kw *KubeUnit) GetKubeTimeoutStart() time.Duration {
+	// RECEPTOR_KUBE_TIMEOUT_START
+	// default: 1 second
+	kubeTimeoutStart := 1 * time.Second
+	envTimeout := os.Getenv("RECEPTOR_KUBE_TIMEOUT_START")
 	if envTimeout != "" {
 		var err error
-		openLogStreamTimeout, err = strconv.Atoi(envTimeout)
-		if err != nil || openLogStreamTimeout < 1 {
+		kubeTimeoutStart, err = time.ParseDuration(envTimeout)
+		if err != nil || kubeTimeoutStart <= 0 {
 			// ignore error, use default
-			kw.GetWorkceptor().nc.GetLogger().Warning("Invalid value for RECEPTOR_OPEN_LOGSTREAM_TIMEOUT: %s. Ignoring", envTimeout)
-			openLogStreamTimeout = 1
+			kw.GetWorkceptor().nc.GetLogger().Warning("Invalid value for RECEPTOR_KUBE_TIMEOUT_START: %s. Ignoring", envTimeout)
+			kubeTimeoutStart = 1 * time.Second
+		}
+		// ignore if exceeds limit, use max
+		if kubeTimeoutStart > time.Minute*1 {
+			kw.GetWorkceptor().nc.GetLogger().Warning("RECEPTOR_KUBE_TIMEOUT_START of: %d is larger than the max timeout of 1m. Max of 1m will be used", kubeTimeoutStart)
+			kubeTimeoutStart = time.Minute * 1
 		}
 	}
-	kw.GetWorkceptor().nc.GetLogger().Debug("RECEPTOR_OPEN_LOGSTREAM_TIMEOUT: %d", openLogStreamTimeout)
+	kw.GetWorkceptor().nc.GetLogger().Debug("RECEPTOR_KUBE_TIMEOUT_START: %s", kubeTimeoutStart)
 
-	return openLogStreamTimeout
+	return kubeTimeoutStart
+}
+
+func (kw *KubeUnit) GetKubeRetryCount() int {
+	// RECEPTOR_KUBE_RETRY_COUNT
+	// default: 5
+	kubeRetryCount := 5
+	envRetryCount := os.Getenv("RECEPTOR_KUBE_RETRY_COUNT")
+	if envRetryCount != "" {
+		var err error
+		kubeRetryCount, err = strconv.Atoi(envRetryCount)
+		if err != nil || kubeRetryCount < 1 {
+			// ignore error, use default
+			kw.GetWorkceptor().nc.GetLogger().Warning("Invalid value for RECEPTOR_KUBE_RETRY_COUNT: %s. Default of 5 will be used", envRetryCount)
+			kubeRetryCount = 5
+		}
+		// ignore if exceeds limit, use max retry
+		if kubeRetryCount > 100 {
+			kw.GetWorkceptor().nc.GetLogger().Warning("RECEPTOR_KUBE_RETRY_COUNT of: %d is larger than the max retry count of 100. Retry count of 100 will be used", kubeRetryCount)
+			kubeRetryCount = 100
+		}
+	}
+	kw.GetWorkceptor().nc.GetLogger().Debug("RECEPTOR_KUBE_RETRY_COUNT: %d", kubeRetryCount)
+
+	return kubeRetryCount
+}
+
+func (kw *KubeUnit) GetSleepDuration(multipler int) time.Duration {
+	maxSleepDuration := time.Minute * 5
+	baseTimeout := int64(kw.GetKubeTimeoutStart())
+
+	if baseTimeout > 0 && int64(multipler) > math.MaxInt64/baseTimeout {
+		return maxSleepDuration
+	}
+
+	sleepDuration := kw.GetKubeTimeoutStart() * time.Duration(multipler)
+	if sleepDuration > maxSleepDuration {
+		return maxSleepDuration
+	}
+
+	return sleepDuration
 }
 
 func (kw *KubeUnit) kubeLoggingConnectionHandler(timestamps bool, sinceTime time.Time) (io.ReadCloser, error) {
@@ -261,7 +307,7 @@ func (kw *KubeUnit) kubeLoggingConnectionHandler(timestamps bool, sinceTime time
 
 	logReq := kw.KubeAPIWrapperInstance.GetLogs(kw.clientset, podNamespace, podName, podOptions)
 	// get logstream, with retry
-	for retries := 5; retries > 0; retries-- {
+	for retries := kw.GetKubeRetryCount(); retries > 0; retries-- {
 		logStream, err = logReq.Stream(kw.GetContext())
 		if err == nil {
 			break
@@ -273,7 +319,7 @@ func (kw *KubeUnit) kubeLoggingConnectionHandler(timestamps bool, sinceTime time
 			retries,
 			err,
 		)
-		time.Sleep(time.Duration(GetTimeoutOpenLogstream(kw)) * time.Second)
+		time.Sleep(kw.GetKubeTimeoutStart())
 	}
 	if err != nil {
 		errMsg := fmt.Sprintf("Error opening log stream for pod %s/%s. Error: %s", podNamespace, podName, err)
@@ -320,7 +366,7 @@ func (kw *KubeUnit) KubeLoggingWithReconnect(streamWait *sync.WaitGroup, stdout 
 	podNamespace := kw.Pod.Namespace
 	podName := kw.Pod.Name
 
-	retries := 5
+	retries := kw.GetKubeRetryCount()
 	prevDelay, curDelay := 0, 1
 	prevPodDelay, curPodDelay := 0, 1
 	prevContainerDelay, curContainerDelay := 0, 1
@@ -346,7 +392,7 @@ mainLoop:
 				retryGetPod,
 				err,
 			)
-			time.Sleep(time.Second * time.Duration(curPodDelay))
+			time.Sleep(kw.GetSleepDuration(curPodDelay))
 			prevPodDelay, curPodDelay = curPodDelay, prevPodDelay+curPodDelay
 		}
 		if err != nil {
@@ -404,7 +450,7 @@ mainLoop:
 							retryGetLogStream,
 						)
 
-						time.Sleep(time.Second * time.Duration(curDelay))
+						time.Sleep(kw.GetSleepDuration(curDelay))
 						prevDelay, curDelay = curDelay, prevDelay+curDelay
 
 						continue mainLoop
@@ -469,7 +515,7 @@ mainLoop:
 							retryGetLogStream,
 						)
 
-						time.Sleep(time.Second * time.Duration(curContainerDelay))
+						time.Sleep(kw.GetSleepDuration(curContainerDelay))
 						prevContainerDelay, curContainerDelay = curContainerDelay, prevContainerDelay+curContainerDelay
 
 						continue mainLoop
@@ -919,7 +965,7 @@ func (kw *KubeUnit) RunWorkUsingLogger() {
 		kw.UpdateBasicStatus(WorkStateRunning, "Pod Running", stdout.Size())
 		streamWait.Done()
 	} else {
-		retryCount := 5
+		retryCount := kw.GetKubeRetryCount()
 		prevPodDelay, curPodDelay := 1, 1
 		prevContainerDelay, curContainerDelay := 1, 1
 	podLoop:
@@ -933,7 +979,7 @@ func (kw *KubeUnit) RunWorkUsingLogger() {
 				if retryCount > 0 {
 					kw.GetWorkceptor().nc.GetLogger().Debug("Error getting pod while trying to attach stdin: '%s' , continuing try to get pod up to %v more times.", kubeErr, retryCount)
 
-					time.Sleep(time.Second * time.Duration(curPodDelay))
+					time.Sleep(kw.GetSleepDuration(curPodDelay))
 					prevPodDelay, curPodDelay = curPodDelay, prevPodDelay+curPodDelay
 
 					continue
@@ -944,7 +990,7 @@ func (kw *KubeUnit) RunWorkUsingLogger() {
 
 				return
 			}
-			retryCount = 5
+			retryCount = kw.GetKubeRetryCount()
 
 			var containerState corev1.ContainerState
 			foundContainer := false
@@ -974,7 +1020,7 @@ func (kw *KubeUnit) RunWorkUsingLogger() {
 				if retryCount > 0 {
 					kw.GetWorkceptor().nc.GetLogger().Debug("Container in %s pod is waiting, will retry %v more times.", podName, retryCount)
 
-					time.Sleep(time.Second * time.Duration(curContainerDelay))
+					time.Sleep(kw.GetSleepDuration(curContainerDelay))
 					prevContainerDelay, curContainerDelay = curContainerDelay, prevContainerDelay+curContainerDelay
 
 					continue podLoop
@@ -995,7 +1041,7 @@ func (kw *KubeUnit) RunWorkUsingLogger() {
 				if retryCount > 0 {
 					kw.GetWorkceptor().nc.GetLogger().Debug("%s is in an unexpected container state %s. This is unexpected. Will retry %v more times.", podName, containerState, retryCount)
 
-					time.Sleep(time.Second * time.Duration(curContainerDelay))
+					time.Sleep(kw.GetSleepDuration(curContainerDelay))
 					prevContainerDelay, curContainerDelay = curContainerDelay, prevContainerDelay+curContainerDelay
 
 					continue podLoop
@@ -1018,7 +1064,7 @@ func (kw *KubeUnit) RunWorkUsingLogger() {
 			})
 
 			var err error
-			for retries := 5; retries > 0; retries-- {
+			for retries := kw.GetKubeRetryCount(); retries > 0; retries-- {
 				err = kw.KubeAPIWrapperInstance.StreamWithContext(kw.GetContext(), exec, remotecommand.StreamOptions{
 					Stdin: stdin,
 					Tty:   false,
