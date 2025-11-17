@@ -243,6 +243,9 @@ func (li *Listener) SendResult(ctx context.Context, conn net.Conn, err error) {
 	}
 }
 
+// AcceptLoop continuously accepts incoming QUIC connections.
+// Connections may have RemoteAddr as either Receptor Addr type or other net.Addr implementations (like net.TCPAddr).
+// Both types require lifecycle management to prevent context leaks.
 func (li *Listener) AcceptLoop(ctx context.Context) {
 	for {
 		select {
@@ -299,7 +302,7 @@ func (li *Listener) AcceptLoop(ctx context.Context) {
 				return
 			}
 			doneChan := make(chan struct{}, 1)
-			cctx, ccancel := context.WithCancel(li.s.context)
+			connCtx, connCancel := context.WithCancel(li.s.context)
 			conn := &Conn{
 				s:        li.s,
 				pc:       li.pc,
@@ -307,22 +310,27 @@ func (li *Listener) AcceptLoop(ctx context.Context) {
 				qs:       qs,
 				doneChan: doneChan,
 				doneOnce: &sync.Once{},
-				ctx:      cctx,
+				ctx:      connCtx,
 			}
+			// Receptor Addr connections can be monitored for unreachable service; other types cannot
 			rAddr, ok := conn.RemoteAddr().(Addr)
 			if ok {
-				go MonitorUnreachable(li.pc, doneChan, rAddr, ccancel)
+				go MonitorUnreachable(li.pc, doneChan, rAddr, connCancel)
+			} else {
+				li.s.Logger.Debug("Remote address is not a Receptor address, skipping unreachable monitoring")
 			}
 			go func() {
+				defer connCancel()
 				select {
 				case <-li.DoneChan:
 					_ = conn.Close()
-				case <-cctx.Done():
+				case <-connCtx.Done():
 					_ = conn.Close()
 				case <-doneChan:
 					return
 				}
 			}()
+			// Send connection to caller. The lifecycle goroutine will cancel connCtx when the connection ends.
 			li.SendResult(ctx, conn, err)
 		}()
 	}
@@ -573,6 +581,11 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 // SetWriteDeadline sets the write deadline.
 func (c *Conn) SetWriteDeadline(t time.Time) error {
 	return c.qs.SetWriteDeadline(t)
+}
+
+// Context returns the connection's context.
+func (c *Conn) Context() context.Context {
+	return c.ctx
 }
 
 const insecureCommonName = "netceptor-insecure-common-name"
