@@ -153,6 +153,11 @@ def default_socket_tcp():
 
 
 @pytest.fixture(scope="class")
+def default_socket_tcp_tls():
+    return "tls://localhost:11113"
+
+
+@pytest.fixture(scope="class")
 def default_socket_file(receptor_mesh):
     return receptor_mesh.get_mesh_tmp_dir() + "/node1.sock"
 
@@ -168,14 +173,14 @@ def default_receptor_controller_tcp(default_socket_tcp):
 
 
 @pytest.fixture(scope="class")
-def default_receptor_controller_tcp_tls(default_socket_tcp, certificate_files):
+def default_receptor_controller_tcp_tls(default_socket_tcp_tls, certificate_files):
     rootcas = certificate_files["caCrtPath"]
     key = certificate_files["clientKeyPath"]
     cert = certificate_files["clientCrtPath"]
     insecureskipverify = True
 
     controller = receptorctl.ReceptorControl(
-        default_socket_tcp,
+        default_socket_tcp_tls,
         rootcas=rootcas,
         key=key,
         cert=cert,
