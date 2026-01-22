@@ -637,9 +637,17 @@ func verifyServerCertificate(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 	return fmt.Errorf("insecure connection to secure service")
 }
 
+// generateClientTLSConfig creates a TLS config for non-TLS mode connections.
+// This is only called when no TLS configuration is provided (see DialContext).
+// Receptor supports both TLS and non-TLS connections per the documentation.
+// When TLS is configured, users provide their own tls.Config via GetClientTLSConfig.
+// InsecureSkipVerify is intentionally true here because:
+// 1. This path is for non-TLS mode where the server uses auto-generated self-signed certs
+// 2. Custom verification is still performed via VerifyPeerCertificate callback
+// 3. The callback (verifyServerCertificate) checks for the insecure connection marker.
 func generateClientTLSConfig(host string) *tls.Config {
 	return &tls.Config{
-		// #nosec G402 -- InsecureSkipVerify is set true in test context only; production usage is config-driven.
+		//nolint:gosec // G402: InsecureSkipVerify is intentional for non-TLS mode; see function comment above
 		InsecureSkipVerify:    true,
 		VerifyPeerCertificate: verifyServerCertificate,
 		NextProtos:            []string{"netceptor"},
