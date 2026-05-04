@@ -293,7 +293,7 @@ func NewWithConsts(ctx context.Context, nodeID string,
 		seenUpdateExpireTime:     seenUpdateExpireTime,
 		maxForwardingHops:        maxForwardingHops,
 		maxConnectionIdleTime:    maxConnectionIdleTime,
-		epoch:                    uint64(time.Now().Unix()*(1<<24)) + uint64(rand.Intn(1<<24)),
+		epoch:                    uint64(time.Now().Unix())*(1<<24) + uint64(rand.Intn(1<<24)), //nolint:gosec
 		sequence:                 0,
 		sequenceLock:             &sync.RWMutex{},
 		connLock:                 &sync.RWMutex{},
@@ -1192,7 +1192,7 @@ func (s *Netceptor) printRoutingTable() {
 			_, _ = fmt.Fprintf(sb, "%s(%.2f) ", peer, s.knownConnectionCosts[conn][peer])
 		}
 		_, _ = fmt.Fprintf(sb, "\n")
-		s.Logger.Log(logLevel, sb.String()) //nolint:govet
+		s.Logger.Log(logLevel, "%s", sb.String())
 	}
 	s.Logger.Log(logLevel, "Routing Table:\n")
 	for node := range s.routingTable {
