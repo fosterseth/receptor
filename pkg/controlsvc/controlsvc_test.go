@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/ansible/receptor/pkg/controlsvc"
 	"github.com/ansible/receptor/pkg/controlsvc/mock_controlsvc"
@@ -22,6 +23,47 @@ const (
 
 func printErrorMessage(t *testing.T, err error) {
 	t.Errorf("expected error %s", err)
+}
+
+func TestNetListen(t *testing.T) {
+	n := &controlsvc.Net{}
+	listener, err := n.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	defer listener.Close()
+
+	if listener.Addr() == nil {
+		t.Fatal("expected non-nil address")
+	}
+}
+
+func TestConnectionListenerAcceptSuccess(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockNetceptor := mock_controlsvc.NewMockNetceptorForControlsvc(ctrl)
+	mockListener := mock_utils.NewMockNetListener(ctrl)
+	logger := logger.NewReceptorLogger("")
+
+	pipeA, pipeB := net.Pipe()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
+
+	first := mockListener.EXPECT().Accept().Return(pipeA, nil)
+	mockListener.EXPECT().Accept().DoAndReturn(func() (net.Conn, error) {
+		ctxCancel()
+
+		return nil, errors.New("terminated")
+	}).After(first)
+	mockNetceptor.EXPECT().GetLogger().Return(logger).AnyTimes()
+	mockNetceptor.EXPECT().NodeID().Return("test").AnyTimes()
+
+	s := controlsvc.New(false, mockNetceptor)
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		pipeB.Close()
+	}()
+	s.ConnectionListener(ctx, mockListener)
+	time.Sleep(200 * time.Millisecond)
 }
 
 func TestConnectionListener(t *testing.T) {
