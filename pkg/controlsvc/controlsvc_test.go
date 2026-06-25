@@ -7,8 +7,8 @@ import (
 	"io"
 	"net"
 	"os"
+	"sync"
 	"testing"
-	"time"
 
 	"github.com/ansible/receptor/pkg/controlsvc"
 	"github.com/ansible/receptor/pkg/controlsvc/mock_controlsvc"
@@ -48,8 +48,12 @@ func TestConnectionListenerAcceptSuccess(t *testing.T) {
 	ctx, ctxCancel := context.WithCancel(context.Background())
 	defer ctxCancel()
 
+	var wg sync.WaitGroup
+	wg.Add(1)
+
 	first := mockListener.EXPECT().Accept().Return(pipeA, nil)
 	mockListener.EXPECT().Accept().DoAndReturn(func() (net.Conn, error) {
+		pipeB.Close()
 		ctxCancel()
 
 		return nil, errors.New("terminated")
@@ -59,11 +63,10 @@ func TestConnectionListenerAcceptSuccess(t *testing.T) {
 
 	s := controlsvc.New(false, mockNetceptor)
 	go func() {
-		time.Sleep(100 * time.Millisecond)
-		pipeB.Close()
+		defer wg.Done()
+		s.ConnectionListener(ctx, mockListener)
 	}()
-	s.ConnectionListener(ctx, mockListener)
-	time.Sleep(200 * time.Millisecond)
+	wg.Wait()
 }
 
 func TestConnectionListener(t *testing.T) {
