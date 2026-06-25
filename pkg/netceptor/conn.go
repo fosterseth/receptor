@@ -186,7 +186,7 @@ func (s *Netceptor) GetConfigForClientOverride(tlscfg *tls.Config) func(*tls.Cli
 		if err != nil {
 			return nil, err
 		}
-		clientTLSCfg.VerifyPeerCertificate = ReceptorVerifyFunc(tlscfg, [][]byte{}, remoteNode, ExpectedHostnameTypeReceptor, VerifyClient, s.Logger)
+		clientTLSCfg.VerifyPeerCertificate = ReceptorVerifyFunc(tlscfg, [][]byte{}, remoteNode, ExpectedHostnameTypeReceptor, VerifyClient, s.Logger) //nolint:gosec // G123: custom peer verification is intentional
 
 		return clientTLSCfg, nil
 	}
@@ -201,7 +201,7 @@ func (s *Netceptor) tracer(ctx context.Context, p logging.Perspective, connID qu
 		}
 		filename := fmt.Sprintf("log_%x_%s.qlog", connID, role)
 		fullPath := path.Join(qlogPath, filename)
-		f, err := os.Create(fullPath)
+		f, err := os.Create(fullPath) //nolint:gosec // G703: path is constructed from controlled QLOGDIR env var
 		if err != nil {
 			s.Logger.Debug("failed to create qlog file at path: %s", qlogPath)
 
@@ -667,7 +667,7 @@ func generateClientTLSConfig(host string) *tls.Config {
 	return &tls.Config{
 		//nolint:gosec // G402: InsecureSkipVerify is intentional for non-TLS mode; see function comment above
 		InsecureSkipVerify:    true,
-		VerifyPeerCertificate: verifyServerCertificate,
+		VerifyPeerCertificate: verifyServerCertificate, //nolint:gosec // G123: custom peer verification is intentional
 		NextProtos:            []string{"netceptor"},
 		ServerName:            host,
 		MinVersion:            tls.VersionTLS12,

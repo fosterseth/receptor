@@ -672,11 +672,11 @@ func (kw *KubeUnit) CreatePod(env map[string]string) error {
 			return fmt.Errorf("at least one container must be named worker")
 		}
 		spec.RestartPolicy = corev1.RestartPolicyNever
-		userNamespace := pod.ObjectMeta.Namespace
+		userNamespace := pod.Namespace
 		if userNamespace != "" {
 			ked.KubeNamespace = userNamespace
 		}
-		userPodName := pod.ObjectMeta.Name
+		userPodName := pod.Name
 		if userPodName != "" {
 			kw.namePrefix = userPodName + "-"
 		}
@@ -1573,10 +1573,10 @@ func (kw *KubeUnit) connectUsingIncluster() error {
 
 func (kw *KubeUnit) connectToKube() error {
 	var err error
-	switch {
-	case kw.authMethod == "kubeconfig" || kw.authMethod == "runtime":
+	switch kw.authMethod {
+	case "kubeconfig", "runtime":
 		err = kw.connectUsingKubeconfig()
-	case kw.authMethod == "incluster":
+	case "incluster":
 		err = kw.connectUsingIncluster()
 	default:
 		return fmt.Errorf("unknown auth method %s", kw.authMethod)
@@ -1974,7 +1974,7 @@ func (cfg KubeWorkerCfg) NewkubeWorker(bwu BaseWorkUnitForWorkUnit, w *Workcepto
 		deletePodOnRestart:      cfg.DeletePodOnRestart,
 		namePrefix:              fmt.Sprintf("%s-", strings.ToLower(cfg.WorkType)),
 	}
-	ku.BaseWorkUnitForWorkUnit.Init(w, unitID, workType, FileSystem{})
+	ku.Init(w, unitID, workType, FileSystem{})
 
 	return ku
 }
@@ -1985,7 +1985,7 @@ func (cfg KubeWorkerCfg) Prepare() error {
 	if lcAuth != "kubeconfig" && lcAuth != "incluster" && lcAuth != "runtime" {
 		return fmt.Errorf("invalid AuthMethod: %s", cfg.AuthMethod)
 	}
-	if cfg.Namespace == "" && !(lcAuth == "kubeconfig" || cfg.AllowRuntimeAuth) {
+	if cfg.Namespace == "" && lcAuth != "kubeconfig" && !cfg.AllowRuntimeAuth {
 		return fmt.Errorf("must provide namespace when AuthMethod is not kubeconfig")
 	}
 	if cfg.KubeConfig != "" {

@@ -798,7 +798,7 @@ func setupBadCertRequest() (certificates.CertOptions, *x509.CertificateRequest, 
 		NotBefore: badCaTimeBefore,
 	}
 
-	badSubjectAltNamesExtension, err := utils.MakeReceptorSAN(badCertOptions.CertNames.DNSNames,
+	badSubjectAltNamesExtension, err := utils.MakeReceptorSAN(badCertOptions.DNSNames,
 		badCertOptions.IPAddresses,
 		badCertOptions.NodeIDs)
 	if err != nil {
@@ -865,7 +865,7 @@ func setupGoodCertRequest() (certificates.CertOptions, *x509.CertificateRequest,
 		NotBefore: goodCaTimeBefore,
 	}
 
-	goodSubjectAltNamesExtension, err := utils.MakeReceptorSAN(goodCertOptions.CertNames.DNSNames, goodCertOptions.IPAddresses, goodCertOptions.NodeIDs)
+	goodSubjectAltNamesExtension, err := utils.MakeReceptorSAN(goodCertOptions.DNSNames, goodCertOptions.IPAddresses, goodCertOptions.NodeIDs)
 	if err != nil {
 		return goodCertOptions, &x509.CertificateRequest{}, err
 	}
