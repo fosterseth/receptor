@@ -255,7 +255,7 @@ func (rl *ReceptorLogger) Log(level int, format string, v ...interface{}) {
 	if logLevel >= level {
 		rl.Logger.SetPrefix(prefix)
 		format, v = rl.appendSuffix(format, v)
-		rl.Logger.Printf(format, v...)
+		rl.Printf(format, v...)
 	}
 }
 
@@ -314,7 +314,7 @@ func (rl *ReceptorLogger) SanitizedLog(level int, format string, v ...interface{
 		message = fmt.Sprintf(message, v...)
 		sanMessage := strings.ReplaceAll(message, "\n", "")
 		rl.Logger.SetPrefix(prefix)
-		rl.Logger.Print(sanMessage)
+		rl.Print(sanMessage)
 	}
 }
 

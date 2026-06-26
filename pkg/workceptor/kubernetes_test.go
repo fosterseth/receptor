@@ -3175,7 +3175,7 @@ func TestKubeUnit_SetFromParams(t *testing.T) {
 		},
 		{
 			name: "Pod definition without permission",
-			params: map[string]string{
+			params: map[string]string{ //nolint:gosec // G101: test data, not credentials
 				"secret_kube_pod": "apiVersion: v1\nkind: Pod",
 			},
 			allowRuntimeAuth:   false,
@@ -3203,7 +3203,7 @@ func TestKubeUnit_SetFromParams(t *testing.T) {
 		},
 		{
 			name: "Pod with conflicting image parameter",
-			params: map[string]string{
+			params: map[string]string{ //nolint:gosec // G101: test data, not credentials
 				"secret_kube_pod": "apiVersion: v1\nkind: Pod",
 				"kube_image":      "busybox:latest",
 			},
@@ -3218,7 +3218,7 @@ func TestKubeUnit_SetFromParams(t *testing.T) {
 		},
 		{
 			name: "Pod with conflicting command parameter",
-			params: map[string]string{
+			params: map[string]string{ //nolint:gosec // G101: test data, not credentials
 				"secret_kube_pod": "apiVersion: v1\nkind: Pod",
 				"kube_command":    "echo hello",
 			},
