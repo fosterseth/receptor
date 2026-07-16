@@ -98,7 +98,7 @@ linters:
             - k8s.io/client-go/tools/clientcmd
             - k8s.io/client-go/tools/clientcmd/api
             - github.com/quic-go/quic-go
-            - github.com/quic-go/quic-go/logging
+            - github.com/quic-go/quic-go/qlog
             - github.com/AaronH88/quic-go
             - github.com/stretchr/testify/assert
             - go.uber.org/mock/gomock
