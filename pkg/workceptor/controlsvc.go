@@ -73,6 +73,12 @@ func (t *workceptorCommandType) InitFromString(params string) (controlsvc.Contro
 		} else {
 			c.params["startpos"] = int64(0)
 		}
+	case "resume":
+		if len(tokens) < 3 {
+			return nil, fmt.Errorf("work resume requires a remote node and remote unit ID")
+		}
+		c.params["node"] = tokens[1]
+		c.params["remote-unitid"] = tokens[2]
 	}
 
 	return c, nil
@@ -186,6 +192,23 @@ func (t *workceptorCommandType) InitFromJSON(config map[string]interface{}) (con
 		signature, err := strFromMap(config, "signature")
 		if err == nil {
 			c.params["signature"] = signature
+		}
+	case "resume":
+		c.params["node"], err = strFromMap(config, "node")
+		if err != nil {
+			return nil, err
+		}
+		c.params["remote-unitid"], err = strFromMap(config, "remote-unitid")
+		if err != nil {
+			return nil, err
+		}
+		tlsClient, err := strFromMap(config, "tlsclient")
+		if err == nil {
+			c.params["tlsclient"] = tlsClient
+		}
+		signWork, err := boolFromMap(config, "signwork")
+		if err == nil {
+			c.params["signwork"] = signWork
 		}
 	}
 
@@ -431,6 +454,41 @@ func (c *workceptorCommand) ControlFunc(ctx context.Context, nc controlsvc.Netce
 		}
 
 		return nil, nil
+	case "resume":
+		remoteNode, err := strFromMap(c.params, "node")
+		if err != nil {
+			return nil, err
+		}
+		remoteUnitID, err := strFromMap(c.params, "remote-unitid")
+		if err != nil {
+			return nil, err
+		}
+		tlsClient, err := strFromMap(c.params, "tlsclient")
+		if err != nil {
+			tlsClient = ""
+		}
+		signWork, _ := boolFromMap(c.params, "signwork")
+		worker, err := c.w.AllocateResumedRemoteUnit(remoteNode, "remote", remoteUnitID, tlsClient, signWork)
+		if err != nil {
+			return nil, err
+		}
+		cfr := make(map[string]interface{})
+		cfr["unitid"] = worker.ID()
+		cfr["remote-unitid"] = remoteUnitID
+		worker.UpdateBasicStatus(WorkStatePending, "Resuming Remote Work", 0)
+		err = worker.Restart()
+		if err != nil && !IsPending(err) {
+			worker.UpdateBasicStatus(WorkStateFailed, fmt.Sprintf("Error resuming remote work: %s", err), 0)
+
+			return cfr, err
+		}
+		if IsPending(err) {
+			cfr["result"] = "Resume Pending"
+		} else {
+			cfr["result"] = "Resumed"
+		}
+
+		return cfr, nil
 	}
 
 	return nil, fmt.Errorf("bad command")

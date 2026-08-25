@@ -47,6 +47,11 @@ func (w *Workceptor) AllocateRemoteUnit(remoteNode string, remoteWorkType string
 	return nil, ErrNotImplemented
 }
 
+// AllocateResumedRemoteUnit creates a new local work unit that attaches to an already-running remote unit
+func (w *Workceptor) AllocateResumedRemoteUnit(remoteNode, remoteWorkType, remoteUnitID, tlsClient string, signWork bool) (WorkUnit, error) {
+	return nil, ErrNotImplemented
+}
+
 // StartUnit starts a unit of work
 func (w *Workceptor) StartUnit(unitID string) error {
 	return ErrNotImplemented

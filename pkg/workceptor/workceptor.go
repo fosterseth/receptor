@@ -336,6 +336,40 @@ func (w *Workceptor) AllocateRemoteUnit(remoteNode, remoteWorkType, workUnitID s
 	return rw, nil
 }
 
+// AllocateResumedRemoteUnit creates or reuses a local work unit that attaches
+// to an already-running work unit on a remote node, skipping the submit step.
+// If a local unit with the same ID already exists, it is reused.
+func (w *Workceptor) AllocateResumedRemoteUnit(remoteNode, remoteWorkType, remoteUnitID, tlsClient string, signWork bool) (WorkUnit, error) {
+	if tlsClient != "" {
+		_, err := w.nc.GetClientTLSConfig(tlsClient, "testhost", netceptor.ExpectedHostnameTypeReceptor)
+		if err != nil {
+			return nil, err
+		}
+	}
+	existing, err := w.findUnit(remoteUnitID)
+	if err == nil {
+		return existing, nil
+	}
+	rw, err := w.AllocateUnit("remote", remoteUnitID, map[string]string{})
+	if err != nil {
+		return nil, err
+	}
+	rw.UpdateFullStatus(func(status *StatusFileData) {
+		ed := status.ExtraData.(*RemoteExtraData)
+		ed.RemoteNode = remoteNode
+		ed.RemoteWorkType = remoteWorkType
+		ed.RemoteUnitID = remoteUnitID
+		ed.RemoteStarted = true
+		ed.TLSClient = tlsClient
+		ed.SignWork = signWork
+	})
+	if rw.LastUpdateError() != nil {
+		return nil, rw.LastUpdateError()
+	}
+
+	return rw, nil
+}
+
 func (w *Workceptor) scanForUnit(unitID string) {
 	unitdir := path.Join(w.dataDir, unitID)
 	fi, _ := os.Stat(unitdir)

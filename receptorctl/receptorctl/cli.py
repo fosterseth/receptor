@@ -514,6 +514,60 @@ def submit(
             op_on_unit_ids(ctx, "release", [unitid])
 
 
+@work.command(help="Attach to an already-running unit of work on a remote node.")
+@click.pass_context
+@click.option(
+    "--node",
+    type=str,
+    required=True,
+    help="Receptor node where the work is running.",
+)
+@click.option(
+    "--remote-unitid",
+    type=str,
+    required=True,
+    help="Unit ID of the running work on the remote node.",
+)
+@click.option(
+    "--tls-client",
+    "tlsclient",
+    type=str,
+    default="",
+    help="TLS client used when connecting to the remote node",
+)
+@click.option("--signwork", help="Digitally sign remote work submissions", is_flag=True)
+@click.option(
+    "--follow",
+    "-f",
+    help="Remain attached to the job and print its results to stdout",
+    is_flag=True,
+)
+@click.option("--rm", help="Release unit after completion", is_flag=True)
+def resume(ctx, node, remote_unitid, tlsclient, signwork, follow, rm):
+    unitid = None
+    try:
+        rc = get_rc(ctx)
+        work = rc.resume_work(
+            node,
+            remote_unitid,
+            tlsclient=tlsclient,
+            signwork=signwork,
+        )
+        result = work.pop("result")
+        unitid = work.pop("unitid")
+        if follow:
+            ctx.invoke(results, unit_id=unitid)
+        else:
+            print_message(f"Result: {result}")
+            print_message(f"Unit ID: {unitid}")
+    except Exception as e:
+        print_error(e)
+        sys.exit(101)
+    finally:
+        if rm and unitid:
+            op_on_unit_ids(ctx, "release", [unitid])
+
+
 @work.command(help="Get results for a previously or currently running unit of work.")
 @click.pass_context
 @click.argument("unit_id", type=str, required=True)
