@@ -243,34 +243,25 @@ class ReceptorControl:
         result = json.loads(text)
         return result
 
-    def resume_work(
-        self,
-        node,
-        remote_unitid,
-        tlsclient=None,
-        signwork=False,
-    ):
+    def get_work_results(self, unit_id, startpos=0, return_socket=False, return_sockfile=True,
+                         node=None, tlsclient=None, signwork=False):
         self.connect()
-        commandMap = {
-            "command": "work",
-            "subcommand": "resume",
-            "node": node,
-            "remote-unitid": remote_unitid,
-        }
-
-        if tlsclient:
-            commandMap["tlsclient"] = tlsclient
-
-        if signwork:
-            commandMap["signwork"] = "true"
-
-        commandJson = json.dumps(commandMap)
-        self.writestr(f"{commandJson}\n")
-        return self.read_and_parse_json()
-
-    def get_work_results(self, unit_id, startpos=0, return_socket=False, return_sockfile=True):
-        self.connect()
-        self.writestr(f"work results {unit_id} {startpos}\n")
+        if node:
+            commandMap = {
+                "command": "work",
+                "subcommand": "results",
+                "unitid": unit_id,
+                "startpos": startpos,
+                "node": node,
+            }
+            if tlsclient:
+                commandMap["tlsclient"] = tlsclient
+            if signwork:
+                commandMap["signwork"] = "true"
+            commandJson = json.dumps(commandMap)
+            self.writestr(f"{commandJson}\n")
+        else:
+            self.writestr(f"work results {unit_id} {startpos}\n")
         text = self.readstr()
         m = re.compile("Streaming results for work unit (.+)").fullmatch(text)
         if not m:
