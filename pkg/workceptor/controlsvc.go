@@ -421,9 +421,20 @@ func (c *workceptorCommand) ControlFunc(ctx context.Context, nc controlsvc.Netce
 				tlsClient = ""
 			}
 			signWork, _ := boolFromMap(c.params, "signwork")
-			worker, err := c.w.AllocateResumedRemoteUnit(remoteNode, "remote", unitid, tlsClient, signWork)
+			worker, err := c.w.findUnit(unitid)
 			if err != nil {
-				return nil, err
+				worker, err = c.w.AllocateUnit("remote", unitid, map[string]string{})
+				if err != nil {
+					return nil, err
+				}
+				worker.UpdateFullStatus(func(status *StatusFileData) {
+					ed := status.ExtraData.(*RemoteExtraData)
+					ed.RemoteNode = remoteNode
+					ed.RemoteUnitID = unitid
+					ed.RemoteStarted = true
+					ed.TLSClient = tlsClient
+					ed.SignWork = signWork
+				})
 			}
 			worker.UpdateBasicStatus(WorkStatePending, "Resuming Remote Work", 0)
 			err = worker.Restart()
