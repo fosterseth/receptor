@@ -73,6 +73,12 @@ func (t *workceptorCommandType) InitFromString(params string) (controlsvc.Contro
 		} else {
 			c.params["startpos"] = int64(0)
 		}
+	case "adopt":
+		if len(tokens) < 3 {
+			return nil, fmt.Errorf("work adopt requires a remote node and unit ID")
+		}
+		c.params["node"] = tokens[1]
+		c.params["unitid"] = tokens[2]
 	}
 
 	return c, nil
@@ -187,9 +193,14 @@ func (t *workceptorCommandType) InitFromJSON(config map[string]interface{}) (con
 		if err == nil {
 			c.params["signature"] = signature
 		}
-		node, err := strFromMap(config, "node")
-		if err == nil {
-			c.params["node"] = node
+	case "adopt":
+		c.params["node"], err = strFromMap(config, "node")
+		if err != nil {
+			return nil, err
+		}
+		c.params["unitid"], err = strFromMap(config, "unitid")
+		if err != nil {
+			return nil, err
 		}
 		tlsClient, err := strFromMap(config, "tlsclient")
 		if err == nil {
@@ -414,36 +425,6 @@ func (c *workceptorCommand) ControlFunc(ctx context.Context, nc controlsvc.Netce
 		if err != nil {
 			return nil, err
 		}
-		remoteNode, _ := strFromMap(c.params, "node")
-		if remoteNode != "" {
-			tlsClient, err := strFromMap(c.params, "tlsclient")
-			if err != nil {
-				tlsClient = ""
-			}
-			signWork, _ := boolFromMap(c.params, "signwork")
-			worker, err := c.w.findUnit(unitid)
-			if err != nil {
-				worker, err = c.w.AllocateUnit("remote", unitid, map[string]string{})
-				if err != nil {
-					return nil, err
-				}
-				worker.UpdateFullStatus(func(status *StatusFileData) {
-					ed := status.ExtraData.(*RemoteExtraData)
-					ed.RemoteNode = remoteNode
-					ed.RemoteUnitID = unitid
-					ed.RemoteStarted = true
-					ed.TLSClient = tlsClient
-					ed.SignWork = signWork
-				})
-			}
-			worker.UpdateBasicStatus(WorkStatePending, "Resuming Remote Work", 0)
-			err = worker.Restart()
-			if err != nil && !IsPending(err) && !strings.Contains(err.Error(), "already running") {
-				worker.UpdateBasicStatus(WorkStateFailed, fmt.Sprintf("Error resuming remote work: %s", err), 0)
-
-				return nil, err
-			}
-		}
 		startPos, err := intFromMap(c.params, "startpos")
 		if err != nil {
 			startPos = 0
@@ -473,6 +454,60 @@ func (c *workceptorCommand) ControlFunc(ctx context.Context, nc controlsvc.Netce
 		}
 
 		return nil, nil
+	case "adopt":
+		remoteNode, err := strFromMap(c.params, "node")
+		if err != nil {
+			return nil, err
+		}
+		unitid, err := strFromMap(c.params, "unitid")
+		if err != nil {
+			return nil, err
+		}
+		tlsClient, err := strFromMap(c.params, "tlsclient")
+		if err != nil {
+			tlsClient = ""
+		}
+		signWork, _ := boolFromMap(c.params, "signwork")
+
+		cfr := make(map[string]interface{})
+
+		// Try to find existing unit first - if it exists, we've already adopted it
+		worker, err := c.w.findUnit(unitid)
+		if err == nil {
+			// Unit already exists - idempotent success, don't change anything
+			cfr["unitid"] = worker.ID()
+			cfr["result"] = "Already Adopted"
+			return cfr, nil
+		}
+
+		// Create new remote unit (remoteWorkType will be updated when we monitor)
+		worker, err = c.w.AllocateRemoteUnit(remoteNode, "", unitid, tlsClient, "", signWork, map[string]string{})
+		if err != nil {
+			return nil, err
+		}
+
+		// Set RemoteUnitID and RemoteStarted for adoption
+		worker.UpdateFullStatus(func(status *StatusFileData) {
+			ed := status.ExtraData.(*RemoteExtraData)
+			ed.RemoteUnitID = unitid
+			ed.RemoteStarted = true
+		})
+
+		cfr["unitid"] = worker.ID()
+		worker.UpdateBasicStatus(WorkStatePending, "Adopting Remote Work", 0)
+		err = worker.Restart()
+		if err != nil && !IsPending(err) {
+			worker.UpdateBasicStatus(WorkStateFailed, fmt.Sprintf("Error adopting remote work: %s", err), 0)
+
+			return cfr, err
+		}
+		if IsPending(err) {
+			cfr["result"] = "Adopt Pending"
+		} else {
+			cfr["result"] = "Adopted"
+		}
+
+		return cfr, nil
 	}
 
 	return nil, fmt.Errorf("bad command")
