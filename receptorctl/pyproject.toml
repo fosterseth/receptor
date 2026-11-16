@@ -1,5 +1,5 @@
 [project]
-name = "receptorctl"
+name = "receptorctl-fosterseth-test"
 authors = [{name = "Red Hat", email = "info@ansible.com"}]
 description = "Receptorctl is a front-end CLI and importable Python library that interacts with Receptor over its control socket interface."
 readme = "README.md"
